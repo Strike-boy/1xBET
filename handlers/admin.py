@@ -142,7 +142,7 @@ async def cmd_orders(message: Message):
 
     lines = ["📋 Aktiv zakaslar (tekshiruvda):\n"]
     for o in orders:
-        lines.append(f"#{o['id']} — {o['amount']} UC, ID: {o['player_id']}, от {o['username']}")
+        lines.append(f"#{o['id']} — {o['amount']} UZS, ID: {o['player_id']}, от {o['username']}")
     await message.answer("\n".join(lines))
 
 
