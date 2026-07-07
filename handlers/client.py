@@ -37,7 +37,7 @@ class OrderStates(StatesGroup):
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Пополнить UC")]],
+        keyboard=[[KeyboardButton(text="📥Hisobni to'ldirish")]],
         resize_keyboard=True,
     )
 
@@ -45,8 +45,8 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
 def payment_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Я оплатил", callback_data="paid")],
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_order")],
+            [InlineKeyboardButton(text="✅ To'lov qildim", callback_data="paid")],
+            [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_order")],
         ]
     )
 
@@ -55,8 +55,14 @@ def payment_kb() -> InlineKeyboardMarkup:
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "👋 Добро пожаловать в магазин UC!\n"
-        "Нажмите кнопку «Пополнить UC», чтобы оформить заказ.",
+        "Assalomu alaykum! 🖐️\n"
+        "Onlayn kassamizga xush kelibsiz!\n"
+        "\n"
+        "💳 Toʻldirishlar — 0% komissiya\n"
+        "⚡️ Jarayon juda sodda va tez\n"
+        "📱 Bir necha soniya ichida hisobingiz toʻldiriladi\n"
+        "\n"
+        "🔘 «Toʻldirish» tugmasini bosing va buyurtmangizni rasmiylashtiring.",
         reply_markup=main_menu_kb(),
     )
 
@@ -66,17 +72,20 @@ async def cmd_cancel(message: Message, state: FSMContext):
     """Дополнительная удобная команда — прервать оформление заказа на любом шаге."""
     current_state = await state.get_state()
     if current_state is None:
-        await message.answer("Нечего отменять 🙂", reply_markup=main_menu_kb())
+        await message.answer("Bekor qilindi❌", reply_markup=main_menu_kb())
         return
     await state.clear()
-    await message.answer("Действие отменено.", reply_markup=main_menu_kb())
+    await message.answer("Bekor qilindi❌", reply_markup=main_menu_kb())
 
 
-@router.message(F.text == "Пополнить UC")
+@router.message(F.text == "📥Hisobni to'ldirish")
 async def start_order(message: Message, state: FSMContext):
     await state.set_state(OrderStates.amount)
     await message.answer(
-        "💰 Введите количество UC, которое хотите получить:",
+        "💰 Minimal: 50.000 UZS\n"
+        "💎 Maksimal: 100.000.000 UZS\n"
+        "\n"
+        "Summani kiriting‼️:",
         reply_markup=ReplyKeyboardRemove(),
     )
 
@@ -85,19 +94,19 @@ async def start_order(message: Message, state: FSMContext):
 async def process_amount(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if not text.isdigit() or int(text) <= 0:
-        await message.answer("⚠️ Пожалуйста, введите корректное число, например 660.")
+        await message.answer("⚠️Iltimos, to'gri summani kiriting, masalan 50500.")
         return
 
     await state.update_data(amount=int(text))
     await state.set_state(OrderStates.player_id)
-    await message.answer("🎮 Введите ваш ID игрока в PUBG Mobile:")
+    await message.answer("UZS🇺🇿 ID raqamini kiriting:")
 
 
 @router.message(OrderStates.player_id)
 async def process_player_id(message: Message, state: FSMContext):
     player_id = (message.text or "").strip()
     if not (2 <= len(player_id) <= 50):
-        await message.answer("⚠️ Введите корректный ID игрока (2–50 символов):")
+        await message.answer("⚠️To'gri ID raqamini kiriting:")
         return
 
     await state.update_data(player_id=player_id)
@@ -105,11 +114,13 @@ async def process_player_id(message: Message, state: FSMContext):
     card_number = await db.get_card_number()
 
     await message.answer(
-        f"📋 Ваш заказ:\n"
-        f"Сумма: {data['amount']} UC\n"
-        f"ID игрока: {player_id}\n\n"
-        f"💳 Реквизиты для оплаты:\n{card_number}\n\n"
-        f"После оплаты нажмите «Я оплатил».",
+        f"📋Sizning zakasingiz:\n"
+        f"💵Summa: {data['amount']} UZS\n"
+        f"🆔ID UZS 🇺🇿: {player_id}\n\n"
+        f"💳To'lov uchun karta:\n{card_number}\n\n"
+        f"{data['amount']} UZS pulni {card_number} karta raqamiga o'tkazing‼️\n\n"
+        f"Diqqat notug'ri o'tqazmang, aks holda tushmaydi‼️\n\n"
+        f"(✅ To'lov qildim) tugmasini bosing‼️",
         reply_markup=payment_kb(),
     )
     await state.set_state(OrderStates.confirm_payment)
@@ -118,9 +129,9 @@ async def process_player_id(message: Message, state: FSMContext):
 @router.callback_query(OrderStates.confirm_payment, F.data == "cancel_order")
 async def cancel_payment(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Заказ отменён.", reply_markup=None)
+    await callback.message.edit_text("❌ To'lov bekor qilindi.", reply_markup=None)
     await callback.message.answer(
-        "Чтобы оформить новый заказ, нажмите кнопку ниже.",
+        "Yanfi zakas berish uchun, pastdagi tugmani bosing.",
         reply_markup=main_menu_kb(),
     )
     await callback.answer()
@@ -130,7 +141,7 @@ async def cancel_payment(callback: CallbackQuery, state: FSMContext):
 async def confirm_paid(callback: CallbackQuery, state: FSMContext):
     await state.set_state(OrderStates.screenshot)
     await callback.message.edit_text(
-        "📸 Пожалуйста, прикрепите скриншот оплаты.", reply_markup=None
+        "📸Iltimos, to'lov chekini junating.", reply_markup=None
     )
     await callback.answer()
 
@@ -149,7 +160,7 @@ async def process_screenshot(message: Message, state: FSMContext, bot: Bot):
         screenshot_file_id = message.document.file_id
         is_document = True
     else:
-        await message.answer("⚠️ Пожалуйста, отправьте скриншот оплаты (фото).")
+        await message.answer("⚠️Iltimos, to'lov chekini junating (rasm).")
         return
 
     data = await state.get_data()
@@ -172,17 +183,17 @@ async def process_screenshot(message: Message, state: FSMContext, bot: Bot):
     )
 
     caption = (
-        f"🆕 Заказ #{order_id}\n"
-        f"Сумма: {amount} UC\n"
-        f"ID игрока: {player_id}\n"
+        f"🆕 Zakas #{order_id}\n"
+        f"Summa: {amount} UC\n"
+        f"ID: {player_id}\n"
         f"От: {username_display} (id: {message.from_user.id})\n"
-        f"Статус: проверка"
+        f"Holati: tekshirilmoqda⏳"
     )
     admin_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Готово", callback_data=f"done:{order_id}"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"cancel:{order_id}"),
+                InlineKeyboardButton(text="✅ Tayyor", callback_data=f"done:{order_id}"),
+                InlineKeyboardButton(text="❌ Bekor qilish", callback_data=f"cancel:{order_id}"),
             ]
         ]
     )
@@ -204,11 +215,11 @@ async def process_screenshot(message: Message, state: FSMContext, bot: Bot):
             )
         await db.set_admin_message_id(order_id, admin_msg.message_id)
     except Exception:
-        logger.exception("Не удалось отправить заказ #%s в админ-чат", order_id)
+        logger.exception("Sizning zakasingiz #%s tekshirishga yuborib bo'lmadi!", order_id)
 
     await message.answer(
-        "✅ Спасибо! Ваш заказ принят на проверку.\n"
-        "Ожидайте, UC будут зачислены вручную после проверки оплаты.",
+        "✅ Raxmat! Zakasingiz qabul qilindi.\n"
+        "Tekshiruvdan so'ng pulingiz tushadi‼️",
         reply_markup=main_menu_kb(),
     )
     await state.clear()
@@ -216,4 +227,4 @@ async def process_screenshot(message: Message, state: FSMContext, bot: Bot):
 
 @router.message(OrderStates.screenshot)
 async def screenshot_invalid(message: Message):
-    await message.answer("⚠️ Пожалуйста, отправьте именно скриншот оплаты (фото).")
+    await message.answer("⚠️Iltimos, to'lov chekini junating (rasm).")
