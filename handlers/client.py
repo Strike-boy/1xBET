@@ -184,7 +184,7 @@ async def process_screenshot(message: Message, state: FSMContext, bot: Bot):
 
     caption = (
         f"🆕 Zakas #{order_id}\n"
-        f"Summa: {amount} UC\n"
+        f"Summa: {amount} UZS\n"
         f"ID: {player_id}\n"
         f"От: {username_display} (id: {message.from_user.id})\n"
         f"Holati: tekshirilmoqda⏳"
