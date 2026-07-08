@@ -2,7 +2,8 @@
 Работа с базой данных SQLite (aiosqlite).
 """
 import aiosqlite
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+UZ_TZ = timezone(timedelta(hours=5))
 import config
 
 DB_PATH = config.DB_PATH
@@ -86,7 +87,7 @@ async def get_order(order_id: int) -> dict | None:
 
 async def update_status(order_id: int, status: str, admin_comment: str = None):
     async with aiosqlite.connect(DB_PATH) as conn:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UZ_TZ).isoformat()
         if admin_comment is not None:
             await conn.execute(
                 "UPDATE orders SET status = ?, processed_at = ?, admin_comment = ? WHERE id = ?",
@@ -138,7 +139,7 @@ async def get_stats() -> dict:
             cursor = await conn.execute(query, params)
             row = await cursor.fetchone()
             return row["c"]
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = datetime.now(UZ_TZ).date().isoformat()
         return {
             "total": await count(),
             "done": await count("status = ?", ("done",)),
@@ -182,7 +183,7 @@ async def get_today_stats() -> dict:
     """Статистика за сегодня"""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = datetime.now(UZ_TZ).date().isoformat()
         cursor = await conn.execute(
             "SELECT COUNT(*) as total, "
             "SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done, "
