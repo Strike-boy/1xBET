@@ -2,7 +2,7 @@
 Обработчики клиентов: пополнение, вывод, связь с админом.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
@@ -306,7 +306,7 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
         f"ID: {data['player_id']}\n"
         f"От: {username} (id: {message.from_user.id})\n"
         f"Валюта: {data.get('currency', 'UZS')}\n"
-        f"🕒 Создан: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        f"🕒 Создан: {datetime.now(UZ_TZ).strftime('%Y-%m-%d %H:%M')}\n"
         f"Статус: ⏳ проверка"
     )
     
@@ -413,7 +413,7 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
         f"Карта: {data['withdraw_card']}\n"
         f"От: {username} (id: {message.from_user.id})\n"
         f"Валюта: {data.get('currency', 'UZS')}\n"
-        f"🕒 Создан: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        f"🕒 Создан: {datetime.now(UZ_TZ).strftime('%Y-%m-%d %H:%M')}\n"
         f"Статус: ⏳ проверка"
     )
     
