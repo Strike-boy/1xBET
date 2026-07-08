@@ -101,7 +101,11 @@ async def skip_comment(message: Message):
     order_id = pending_comments.pop(admin_id)
     await finalize_cancel(order_id, admin_id, comment=None, bot=message.bot, source_msg=message)
 
-@router.message(F.text)
+@router.message(
+    F.text,
+    ~F.text.startswith("/"),
+    lambda message: message.from_user.id in pending_comments
+)
 async def receive_comment(message: Message):
     if not is_admin(message.from_user.id):
         return
