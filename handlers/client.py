@@ -3,6 +3,7 @@
 """
 import logging
 from datetime import datetime, timedelta, timezone
+UZ_TZ = timezone(timedelta(hours=5))
 from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
