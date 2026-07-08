@@ -1,43 +1,33 @@
-"""
-Конфигурация бота.
-
-Все чувствительные данные (токен, ID админов, ID админ-чата) берутся
-из файла .env и НЕ должны попадать в git-репозиторий (см. .gitignore).
-"""
-
 import os
-
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Токен бота, полученный от @BotFather
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-
-# ID чата/группы для админов, куда приходят заказы на проверку
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
+ADMIN_IDS = [int(uid.strip()) for uid in os.getenv("ADMIN_IDS", "").split(",") if uid.strip()]
+DEFAULT_CARD_NUMBER = os.getenv("CARD_NUMBER", "Номер карты не задан")
 
-# Telegram ID администраторов через запятую, например: "111111111,222222222"
-ADMIN_IDS = [
-    int(uid.strip())
-    for uid in os.getenv("ADMIN_IDS", "").split(",")
-    if uid.strip()
-]
+# PostgreSQL
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = int(os.getenv("DB_PORT", "5432"))
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_NAME = os.getenv("DB_NAME", "ucshop")
 
-# Путь к файлу базы данных SQLite
-DB_PATH = os.getenv("DB_PATH", "orders.db")
+# Redis
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 
-# Номер карты по умолчанию (используется, пока админ не задаст свой через /setcard)
-DEFAULT_CARD_NUMBER = os.getenv(
-    "CARD_NUMBER", "Номер карты ещё не задан. Обратитесь к администратору."
-)
+# Контакты админов для отображения пользователям (можно сгенерировать из ADMIN_IDS)
+ADMIN_CONTACTS = os.getenv("ADMIN_CONTACTS", "https://t.me/admin1, https://t.me/admin2")
+
+# Видео-инструкция для вывода (file_id или ссылка)
+WITHDRAW_VIDEO = os.getenv("WITHDRAW_VIDEO", "")
 
 if not BOT_TOKEN:
-    raise RuntimeError(
-        "BOT_TOKEN не задан. Скопируйте .env.example в .env и укажите токен бота."
-    )
-
+    raise RuntimeError("BOT_TOKEN не задан")
 if not ADMIN_IDS:
-    raise RuntimeError(
-        "ADMIN_IDS не задан. Укажите хотя бы один Telegram ID администратора в .env."
-    )
+    raise RuntimeError("ADMIN_IDS не задан")
