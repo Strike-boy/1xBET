@@ -9,7 +9,6 @@ DB_PATH = config.DB_PATH
 
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as conn:
-        # Проверяем, есть ли уже таблица orders, если нет – создаём с новыми полями
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS orders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +29,6 @@ async def init_db():
                 admin_message_id INTEGER
             )
         """)
-        # Таблица настроек
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -39,10 +37,8 @@ async def init_db():
         """)
         await conn.commit()
 
-# --- Вспомогательные функции для миграции (если таблица уже существует, но без новых полей) ---
 async def migrate_if_needed():
     async with aiosqlite.connect(DB_PATH) as conn:
-        # Проверим наличие колонки order_type
         cursor = await conn.execute("PRAGMA table_info(orders)")
         columns = [row[1] for row in await cursor.fetchall()]
         if "order_type" not in columns:
@@ -58,8 +54,6 @@ async def migrate_if_needed():
         if "processed_at" not in columns:
             await conn.execute("ALTER TABLE orders ADD COLUMN processed_at TIMESTAMP")
         await conn.commit()
-
-# --- Основные функции ---
 
 async def create_order(user_id: int, chat_id: int, username: str, amount: int,
                        player_id: str, screenshot_file_id: str, currency: str = 'UZS',
@@ -106,7 +100,6 @@ async def update_status(order_id: int, status: str, admin_comment: str = None):
         await conn.commit()
 
 async def get_active_order(user_id: int) -> dict | None:
-    """Проверяет, есть ли у пользователя активный заказ (status = 'checking')"""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cursor = await conn.execute(
@@ -126,7 +119,6 @@ async def get_checking_orders() -> list[dict]:
         return [dict(r) for r in rows]
 
 async def get_checking_orders_older_than(minutes: int) -> list[dict]:
-    """Заказы в статусе checking, созданные более minutes минут назад"""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cursor = await conn.execute(
@@ -172,3 +164,92 @@ async def set_card_number(new_number: str):
             (new_number,)
         )
         await conn.commit()
+
+# ========== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ==========
+
+async def get_user_orders(user_id: int, limit: int = 10) -> list[dict]:
+    """Получить последние заказы пользователя"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+            (user_id, limit)
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+async def get_today_stats() -> dict:
+    """Статистика за сегодня"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        today = datetime.now(timezone.utc).date().isoformat()
+        cursor = await conn.execute(
+            "SELECT COUNT(*) as total, "
+            "SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done, "
+            "SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled, "
+            "SUM(CASE WHEN status = 'checking' THEN 1 ELSE 0 END) as checking "
+            "FROM orders WHERE DATE(created_at) = ?",
+            (today,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else {"total": 0, "done": 0, "cancelled": 0, "checking": 0}
+
+async def get_orders_by_status(status: str) -> list[dict]:
+    """Получить заказы по статусу"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC",
+            (status,)
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+async def update_order_comment(order_id: int, comment: str):
+    """Обновить комментарий к заказу"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE orders SET admin_comment = ? WHERE id = ?",
+            (comment, order_id)
+        )
+        await conn.commit()
+
+async def delete_old_orders(days: int = 30):
+    """Удалить старые заказы (старше days дней)"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "DELETE FROM orders WHERE DATE(created_at) < DATE('now', ?)",
+            (f'-{days} days',)
+        )
+        await conn.commit()
+
+async def get_total_amount_by_status(status: str) -> int:
+    """Получить общую сумму заказов по статусу"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute(
+            "SELECT SUM(amount) as total FROM orders WHERE status = ?",
+            (status,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row and row[0] else 0
+
+async def get_orders_count_by_currency() -> dict:
+    """Количество заказов по валютам"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT currency, COUNT(*) as count FROM orders GROUP BY currency"
+        )
+        rows = await cursor.fetchall()
+        return {row["currency"]: row["count"] for row in rows}
+
+async def get_last_order(user_id: int) -> dict | None:
+    """Получить последний заказ пользователя"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            "SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+            (user_id,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
