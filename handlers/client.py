@@ -29,7 +29,7 @@ class DepositStates(StatesGroup):
 
 class WithdrawStates(StatesGroup):
     currency = State()        # выбор валюты
-    video_shown = State()     # после показа видео (можно пропустить)
+    video_shown = State()     # после показа видео
     player_id = State()       # ID игрока
     card_number = State()     # карта для вывода
     confirm = State()         # подтверждение отправки
@@ -60,8 +60,8 @@ def amount_kb():
     """Быстрые суммы для пополнения (reply)"""
     return ReplyKeyboardMarkup(
         keyboard=[
-            ["50 000", "100 000", "150 000"],
-            ["300 000", "500 000", "Другая сумма"]
+            [KeyboardButton(text="50 000"), KeyboardButton(text="100 000"), KeyboardButton(text="150 000")],
+            [KeyboardButton(text="300 000"), KeyboardButton(text="500 000"), KeyboardButton(text="Другая сумма")]
         ],
         resize_keyboard=True
     )
@@ -103,7 +103,7 @@ async def deposit_start(message: Message, state: FSMContext):
     # Проверка на активный заказ
     active = await db.get_active_order(message.from_user.id)
     if active:
-        await message.answer("⏳ У вас уже есть активный заказ (№{}). Дождитесь его обработки.".format(active['id']))
+        await message.answer(f"⏳ У вас уже есть активный заказ (№{active['id']}). Дождитесь его обработки.")
         return
     await state.set_state(DepositStates.currency)
     await message.answer("Выберите валюту для пополнения:", reply_markup=currency_kb())
@@ -112,7 +112,7 @@ async def deposit_start(message: Message, state: FSMContext):
 async def withdraw_start(message: Message, state: FSMContext):
     active = await db.get_active_order(message.from_user.id)
     if active:
-        await message.answer("⏳ У вас уже есть активный заказ (№{}). Дождитесь его обработки.".format(active['id']))
+        await message.answer(f"⏳ У вас уже есть активный заказ (№{active['id']}). Дождитесь его обработки.")
         return
     await state.set_state(WithdrawStates.currency)
     await message.answer("Выберите валюту вывода:", reply_markup=currency_kb())
@@ -137,6 +137,7 @@ async def currency_selected(callback: CallbackQuery, state: FSMContext):
     currency = callback.data.split("_")[1].upper()  # UZS или USD
     await state.update_data(currency=currency)
     current_state = await state.get_state()
+    
     if current_state == DepositStates.currency.state:
         await state.set_state(DepositStates.amount)
         await callback.message.delete()
@@ -176,12 +177,16 @@ async def cancel_action(callback: CallbackQuery, state: FSMContext):
 @router.message(DepositStates.amount, F.text.regexp(r'^[\d\s]+$'))  # цифры и пробелы
 async def deposit_amount(message: Message, state: FSMContext):
     text = message.text.strip().replace(" ", "")
-    if text == "Другаясумма":  # если нажали кнопку "Другая сумма"
+    
+    # Если нажали кнопку "Другая сумма"
+    if text == "Другаясумма" or text == "Другая":
         await message.answer("Введите сумму вручную (только цифры):")
         return
+    
     if not text.isdigit():
         await message.answer("Введите корректное число.")
         return
+    
     amount = int(text)
     if amount < 50000:
         await message.answer("Минимальная сумма 50 000 UZS.")
@@ -189,17 +194,19 @@ async def deposit_amount(message: Message, state: FSMContext):
     if amount > 100000000:
         await message.answer("Максимальная сумма 100 000 000 UZS.")
         return
+    
     # Для быстрых кнопок генерируем хвост
     extra = generate_extra_amount()
     total = amount + extra
     await state.update_data(amount=amount, extra=extra, total=total)
     await state.set_state(DepositStates.player_id)
+    
     # Показываем сумму с хвостом
     card = await db.get_card_number()
     await message.answer(
-        f"💳 Переведите **{total}** UZS на карту:\n{card}\n\n"
+        f"💳 Переведите **{total:,}** {await state.get_value('currency', 'UZS')} на карту:\n{card}\n\n"
         f"Ваш идентификатор: +{extra} (для быстрой проверки)\n"
-        f"После перевода введите ID игрока (UZS ID):",
+        f"После перевода введите ID игрока:",
         reply_markup=ReplyKeyboardRemove()
     )
 
@@ -210,6 +217,7 @@ async def deposit_amount_manual(message: Message, state: FSMContext):
     if not text.isdigit():
         await message.answer("Введите корректное число.")
         return
+    
     amount = int(text)
     if amount < 50000:
         await message.answer("Минимальная сумма 50 000 UZS.")
@@ -217,13 +225,15 @@ async def deposit_amount_manual(message: Message, state: FSMContext):
     if amount > 100000000:
         await message.answer("Максимальная сумма 100 000 000 UZS.")
         return
+    
     # При ручном вводе хвост не добавляем
     await state.update_data(amount=amount, extra=0, total=amount)
     await state.set_state(DepositStates.player_id)
+    
     card = await db.get_card_number()
     await message.answer(
-        f"💳 Переведите **{amount}** UZS на карту:\n{card}\n\n"
-        f"После перевода введите ID игрока (UZS ID):",
+        f"💳 Переведите **{amount:,}** UZS на карту:\n{card}\n\n"
+        f"После перевода введите ID игрока:",
         reply_markup=ReplyKeyboardRemove()
     )
 
@@ -234,11 +244,13 @@ async def deposit_player_id(message: Message, state: FSMContext):
     if not (2 <= len(player_id) <= 50):
         await message.answer("ID должен содержать от 2 до 50 символов. Попробуйте снова:")
         return
-    await state.update_data(player_id=player_id)
+    
     data = await state.get_data()
+    await state.update_data(player_id=player_id)
+    
     await message.answer(
         f"📋 Проверьте данные:\n"
-        f"Сумма: {data['total']} {data['currency']}\n"
+        f"Сумма: {data.get('total', data.get('amount', 0)):,} {data.get('currency', 'UZS')}\n"
         f"ID игрока: {player_id}\n\n"
         f"Если всё верно, нажмите «✅ Оплатил» после перевода.",
         reply_markup=confirm_payment_kb()
@@ -274,12 +286,13 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
 
     data = await state.get_data()
     username = f"@{message.from_user.username}" if message.from_user.username else message.from_user.full_name
+    
     order_id = await db.create_order(
         user_id=message.from_user.id,
         chat_id=message.chat.id,
         username=username,
         amount=data['amount'],
-        extra_amount=data['extra'],
+        extra_amount=data.get('extra', 0),
         player_id=data['player_id'],
         screenshot_file_id=file_id,
         currency=data.get('currency', 'UZS'),
@@ -289,19 +302,21 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
     # Отправляем админам
     caption = (
         f"🆕 Заказ #{order_id} (пополнение)\n"
-        f"Сумма: {data['total']} {data['currency']}\n"
+        f"Сумма: {data.get('total', data['amount']):,} {data.get('currency', 'UZS')}\n"
         f"ID: {data['player_id']}\n"
         f"От: {username} (id: {message.from_user.id})\n"
         f"Валюта: {data.get('currency', 'UZS')}\n"
         f"🕒 Создан: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
         f"Статус: ⏳ проверка"
     )
+    
     admin_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✅ Одобрить", callback_data=f"done:{order_id}"),
              InlineKeyboardButton(text="❌ Отклонить", callback_data=f"cancel:{order_id}")]
         ]
     )
+    
     try:
         if is_doc:
             msg = await bot.send_document(config.ADMIN_CHAT_ID, file_id, caption=caption, reply_markup=admin_kb)
@@ -319,9 +334,6 @@ async def deposit_screenshot_invalid(message: Message):
     await message.answer("Пожалуйста, отправьте изображение чека.")
 
 # ------------------- Сценарий вывода -------------------
-# После выбора валюты мы уже перешли в WithdrawStates.player_id (в currency_selected)
-# Там мы уже показали видео и попросили ввести ID
-
 @router.message(WithdrawStates.player_id)
 async def withdraw_player_id(message: Message, state: FSMContext):
     player_id = message.text.strip()
@@ -335,14 +347,14 @@ async def withdraw_player_id(message: Message, state: FSMContext):
 @router.message(WithdrawStates.card_number)
 async def withdraw_card_number(message: Message, state: FSMContext):
     card = message.text.strip()
-    # простая валидация: заменим пробелы, проверим длину
     card_clean = card.replace(" ", "")
     if not card_clean.isdigit() or len(card_clean) < 10:
         await message.answer("Введите корректный номер карты (только цифры).")
         return
+    
     await state.update_data(withdraw_card=card)
     data = await state.get_data()
-    # Показываем данные для выдачи и кнопки
+    
     await message.answer(
         f"📋 Проверьте данные вывода:\n"
         f"ID: {data['player_id']}\n"
@@ -381,11 +393,12 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
 
     data = await state.get_data()
     username = f"@{message.from_user.username}" if message.from_user.username else message.from_user.full_name
+    
     order_id = await db.create_order(
         user_id=message.from_user.id,
         chat_id=message.chat.id,
         username=username,
-        amount=0,  # для вывода сумма не указывается, можно 0
+        amount=0,
         extra_amount=0,
         player_id=data['player_id'],
         screenshot_file_id=file_id,
@@ -403,12 +416,14 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
         f"🕒 Создан: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
         f"Статус: ⏳ проверка"
     )
+    
     admin_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✅ Одобрить", callback_data=f"done:{order_id}"),
              InlineKeyboardButton(text="❌ Отклонить", callback_data=f"cancel:{order_id}")]
         ]
     )
+    
     try:
         if is_doc:
             msg = await bot.send_document(config.ADMIN_CHAT_ID, file_id, caption=caption, reply_markup=admin_kb)
