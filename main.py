@@ -42,8 +42,8 @@ async def main():
     # Подключаем middleware антифлуда
     dp.update.middleware(ThrottlingMiddleware(rate_limit=1.0))
 
-    dp.include_router(client.router)
     dp.include_router(admin.router)
+    dp.include_router(client.router)
 
     @dp.errors()
     async def errors_handler(event: ErrorEvent):
