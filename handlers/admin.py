@@ -4,7 +4,8 @@
 - команды /setcard, /orders, /stats, /history
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+UZ_TZ = timezone(timedelta(hours=5))
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -38,7 +39,7 @@ async def order_done(callback: CallbackQuery, bot: Bot):
         return
 
     await db.update_status(order_id, "done")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now(UZ_TZ).strftime("%Y-%m-%d %H:%M")
 
     # Уведомление клиенту
     try:
@@ -126,7 +127,7 @@ async def finalize_cancel(order_id: int, admin_id: int, comment: str | None, bot
         return
     
     await db.update_status(order_id, "cancelled", admin_comment=comment)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now(UZ_TZ).strftime("%Y-%m-%d %H:%M")
     admin_name = f"@{source_msg.from_user.username}" if source_msg.from_user.username else source_msg.from_user.full_name
 
     # Уведомление клиенту
@@ -198,7 +199,7 @@ async def cmd_history(message: Message):
         return
     
     stats = await db.get_stats()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(UZ_TZ).strftime("%Y-%m-%d")
     
     await message.answer(
         f"📊 История заказов на {today}:\n"
