@@ -40,8 +40,7 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
 
     # Подключаем middleware антифлуда
-    dp.message.middleware(ThrottlingMiddleware(rate_limit=1.0))
-    dp.callback_query.middleware(ThrottlingMiddleware(rate_limit=1.0))
+    dp.update.middleware(ThrottlingMiddleware(rate_limit=1.0))
 
     dp.include_router(client.router)
     dp.include_router(admin.router)
