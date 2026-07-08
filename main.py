@@ -6,40 +6,44 @@ from flask import Flask
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ErrorEvent
 import config
 import database as db
-from redis_storage import get_redis_storage
-from handlers import client, deposit, withdraw, admin
-from middlewares.throttling import ThrottlingMiddleware
+from handlers import client, admin
+from middlewares import ThrottlingMiddleware
+from scheduler import remind_admins
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
+# Flask для Render
 app = Flask(__name__)
 
-@app.route('/')
+@app.route("/")
 def home():
     return "UC Shop Bot is running!"
 
 def run_web():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 async def main():
+    # Инициализация БД и миграция
     await db.init_db()
-    logger.info("База данных PostgreSQL инициализирована")
+    await db.migrate_if_needed()
+    logger.info("База данных готова (%s)", config.DB_PATH)
 
-    storage = get_redis_storage()
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    dp = Dispatcher(storage=storage)
+    dp = Dispatcher(storage=MemoryStorage())
 
-    # Подключаем middleware антифлуда глобально (для сообщений и колбэков)
+    # Подключаем middleware антифлуда
     dp.message.middleware(ThrottlingMiddleware(rate_limit=1.0))
     dp.callback_query.middleware(ThrottlingMiddleware(rate_limit=1.0))
 
     dp.include_router(client.router)
-    dp.include_router(deposit.router)
-    dp.include_router(withdraw.router)
     dp.include_router(admin.router)
 
     @dp.errors()
@@ -47,13 +51,17 @@ async def main():
         logger.exception("Ошибка: %s", event.exception)
         return True
 
-    # Запускаем фоновую задачу напоминания админам
-    asyncio.create_task(admin.reminder_task(bot))
+    # Запускаем напоминания админам
+    asyncio.create_task(remind_admins(bot))
 
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Бот запущен")
+
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     Thread(target=run_web, daemon=True).start()
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Бот остановлен")
