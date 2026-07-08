@@ -1,144 +1,147 @@
-"""
-Работа с базой данных SQLite (через aiosqlite).
-
-Таблицы:
-- orders   — заказы клиентов на пополнение UC
-- settings — изменяемые настройки (например, текущий номер карты для /setcard)
-"""
-
+import asyncpg
 from datetime import datetime, timezone
-
-import aiosqlite
-
 import config
 
-DB_PATH = config.DB_PATH
-
+pool = None
 
 async def init_db():
-    async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute(
-            """
+    global pool
+    pool = await asyncpg.create_pool(
+        host=config.DB_HOST,
+        port=config.DB_PORT,
+        user=config.DB_USER,
+        password=config.DB_PASSWORD,
+        database=config.DB_NAME,
+        min_size=2,
+        max_size=10,
+    )
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id BIGINT PRIMARY KEY,
+                language VARCHAR(2) DEFAULT 'ru',
+                active_order_id INTEGER,
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS orders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                chat_id INTEGER NOT NULL,
-                username TEXT,
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                type VARCHAR(20) NOT NULL,
                 amount INTEGER NOT NULL,
-                player_id TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'checking',
+                unique_sum INTEGER,
+                player_id VARCHAR(50) NOT NULL,
+                card_number VARCHAR(50),
+                status VARCHAR(20) DEFAULT 'checking',
                 screenshot_file_id TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                comment TEXT,
+                admin_username VARCHAR(100),
+                created_at TIMESTAMP DEFAULT NOW(),
+                processed_at TIMESTAMP,
                 admin_message_id INTEGER
             )
-            """
-        )
-        await conn.execute(
-            """
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
+                key VARCHAR(50) PRIMARY KEY,
                 value TEXT
             )
-            """
+        """)
+        # Добавляем настройки по умолчанию, если их нет
+        await conn.execute("""
+            INSERT INTO settings (key, value) VALUES ('card_number', $1)
+            ON CONFLICT (key) DO NOTHING
+        """, config.DEFAULT_CARD_NUMBER)
+        # Видео для вывода
+        await conn.execute("""
+            INSERT INTO settings (key, value) VALUES ('withdraw_video', $1)
+            ON CONFLICT (key) DO NOTHING
+        """, config.WITHDRAW_VIDEO)
+        # Контакты админов
+        await conn.execute("""
+            INSERT INTO settings (key, value) VALUES ('admin_contacts', $1)
+            ON CONFLICT (key) DO NOTHING
+        """, config.ADMIN_CONTACTS)
+
+async def get_user_language(user_id: int) -> str:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT language FROM users WHERE user_id = $1", user_id)
+        if row:
+            return row['language']
+        return 'ru'  # по умолчанию русский
+
+async def set_user_language(user_id: int, lang: str):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO users (user_id, language) VALUES ($1, $2)
+            ON CONFLICT (user_id) DO UPDATE SET language = $2, updated_at = NOW()
+        """, user_id, lang)
+
+async def has_active_order(user_id: int) -> bool:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id FROM orders WHERE user_id = $1 AND status = 'checking' LIMIT 1",
+            user_id
         )
-        await conn.commit()
+        return row is not None
 
+async def create_order(user_id: int, type: str, amount: int, player_id: str,
+                       card_number: str = None, unique_sum: int = None,
+                       screenshot_file_id: str = None) -> int:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            INSERT INTO orders (user_id, type, amount, unique_sum, player_id, card_number, screenshot_file_id, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'checking')
+            RETURNING id
+        """, user_id, type, amount, unique_sum, player_id, card_number, screenshot_file_id)
+        return row['id']
 
-async def create_order(
-    user_id: int,
-    chat_id: int,
-    username: str,
-    amount: int,
-    player_id: str,
-    screenshot_file_id: str,
-) -> int:
-    async with aiosqlite.connect(DB_PATH) as conn:
-        cursor = await conn.execute(
-            """
-            INSERT INTO orders (user_id, chat_id, username, amount, player_id, status, screenshot_file_id)
-            VALUES (?, ?, ?, ?, ?, 'checking', ?)
-            """,
-            (user_id, chat_id, username, amount, player_id, screenshot_file_id),
-        )
-        await conn.commit()
-        return cursor.lastrowid
+async def update_order_status(order_id: int, status: str, comment: str = None, admin_username: str = None):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE orders SET status = $1, comment = $2, admin_username = $3, processed_at = NOW()
+            WHERE id = $4
+        """, status, comment, admin_username, order_id)
 
-
-async def set_admin_message_id(order_id: int, message_id: int):
-    async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute(
-            "UPDATE orders SET admin_message_id = ? WHERE id = ?",
-            (message_id, order_id),
-        )
-        await conn.commit()
-
-
-async def get_order(order_id: int) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        cursor = await conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
-        row = await cursor.fetchone()
+async def get_order(order_id: int) -> dict:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM orders WHERE id = $1", order_id)
         return dict(row) if row else None
 
-
-async def update_status(order_id: int, status: str):
-    async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute(
-            "UPDATE orders SET status = ? WHERE id = ?",
-            (status, order_id),
-        )
-        await conn.commit()
-
-
 async def get_checking_orders() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        cursor = await conn.execute(
-            "SELECT * FROM orders WHERE status = 'checking' ORDER BY created_at DESC"
-        )
-        rows = await cursor.fetchall()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM orders WHERE status = 'checking' ORDER BY created_at ASC")
         return [dict(r) for r in rows]
 
-
 async def get_stats() -> dict:
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-
-        async def count(where: str = "", params: tuple = ()) -> int:
-            query = "SELECT COUNT(*) as c FROM orders"
-            if where:
-                query += f" WHERE {where}"
-            cursor = await conn.execute(query, params)
-            row = await cursor.fetchone()
-            return row["c"]
-
+    async with pool.acquire() as conn:
         today = datetime.now(timezone.utc).date().isoformat()
-
+        total = await conn.fetchval("SELECT COUNT(*) FROM orders")
+        done = await conn.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'done'")
+        cancelled = await conn.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'cancelled'")
+        checking = await conn.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'checking'")
+        today_count = await conn.fetchval("SELECT COUNT(*) FROM orders WHERE DATE(created_at) = $1", today)
         return {
-            "total": await count(),
-            "done": await count("status = ?", ("done",)),
-            "cancelled": await count("status = ?", ("cancelled",)),
-            "checking": await count("status = ?", ("checking",)),
-            "today": await count("DATE(created_at) = ?", (today,)),
+            'total': total,
+            'done': done,
+            'cancelled': cancelled,
+            'checking': checking,
+            'today': today_count
         }
 
+async def set_admin_message_id(order_id: int, message_id: int):
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE orders SET admin_message_id = $1 WHERE id = $2", message_id, order_id)
 
-async def get_card_number() -> str:
-    async with aiosqlite.connect(DB_PATH) as conn:
-        cursor = await conn.execute("SELECT value FROM settings WHERE key = 'card_number'")
-        row = await cursor.fetchone()
-        if row and row[0]:
-            return row[0]
-        return config.DEFAULT_CARD_NUMBER
+async def get_setting(key: str) -> str:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT value FROM settings WHERE key = $1", key)
+        return row['value'] if row else ""
 
-
-async def set_card_number(new_number: str):
-    async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute(
-            """
-            INSERT INTO settings (key, value) VALUES ('card_number', ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-            """,
-            (new_number,),
-        )
-        await conn.commit()
+async def set_setting(key: str, value: str):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO settings (key, value) VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE SET value = $2
+        """, key, value)
