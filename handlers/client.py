@@ -161,15 +161,15 @@ async def currency_selected(callback: CallbackQuery, state: FSMContext):
             try:
                 await callback.message.answer_video(
                     config.WITHDRAW_VIDEO_FILE_ID,
-                    caption="📹 Видеоинструкция по выводу средств.\nПосле просмотра введите ID игрока:"
+                    caption="📹 Instruksiya:\n ID kiriting:"
                 )
             except Exception:
                 await callback.message.answer(
-                    "📹 Видеоинструкция временно недоступна. Перейдите к вводу ID игрока:"
+                    "ID kiriting:"
                 )
         else:
             await callback.message.answer(
-                "📹 Видеоинструкция пока не загружена. Введите ID игрока для вывода:"
+                "ID kiriting:"
             )
         await state.set_state(WithdrawStates.player_id)
     await callback.answer()
@@ -187,20 +187,20 @@ async def deposit_amount(message: Message, state: FSMContext):
     text = message.text.strip().replace(" ", "")
     
     # Если нажали кнопку "Другая сумма"
-    if text == "Другаясумма" or text == "Другая":
-        await message.answer("Введите сумму вручную (только цифры):")
+    if text == "Boshqa summa" or text == "Boshqa":
+        await message.answer("Summa kiriting:")
         return
     
     if not text.isdigit():
-        await message.answer("Введите корректное число.")
+        await message.answer("To'gri summa kiriting.")
         return
     
     amount = int(text)
     if amount < 50000:
-        await message.answer("Минимальная сумма 50 000 UZS.")
+        await message.answer("Minimal summa 50 000 UZS.")
         return
     if amount > 100000000:
-        await message.answer("Максимальная сумма 100 000 000 UZS.")
+        await message.answer("Maksimal summa 100 000 000 UZS.")
         return
     
     # Для быстрых кнопок генерируем хвост
