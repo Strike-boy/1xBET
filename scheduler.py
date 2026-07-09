@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 async def remind_admins(bot: Bot):
     """Каждые 5 минут проверяет заказы в статусе checking старше 5 минут и напоминает."""
     while True:
-        await asyncio.sleep(100)  # 5 минут
+        await asyncio.sleep(100)  # 1.5 минут
         try:
             orders = await db.get_checking_orders_older_than(minutes=5)
             if orders:
