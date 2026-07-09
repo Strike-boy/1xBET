@@ -145,7 +145,7 @@ async def currency_selected(callback: CallbackQuery, state: FSMContext):
         await state.set_state(DepositStates.player_id)
         await callback.message.delete()
         await callback.message.answer(
-            "🎮 Iltimos, o'yinchi ID'ingizni kiriting:"
+            "ID raqamini kiriting:"
         )
     elif current_state == WithdrawStates.currency.state:
         await state.set_state(WithdrawStates.player_id)
@@ -158,11 +158,11 @@ async def currency_selected(callback: CallbackQuery, state: FSMContext):
                 )
             except Exception:
                 await callback.message.answer(
-                    "🎮 Iltimos, o'yinchi ID'ingizni kiriting:"
+                    "ID raqamini kiriting:"
                 )
         else:
             await callback.message.answer(
-                "🎮 Iltimos, o'yinchi ID'ingizni kiriting:"
+                "ID raqamini kiriting:"
             )
     await callback.answer()
 
@@ -170,15 +170,15 @@ async def currency_selected(callback: CallbackQuery, state: FSMContext):
 async def cancel_action(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.delete()
-    await callback.message.answer("Bekor qilindi.", reply_markup=main_menu_kb())
+    await callback.message.answer("❌Bekor qilindi.", reply_markup=main_menu_kb())
     await callback.answer()
 
 # ------------------- Пополнение: ID игрока -------------------
 @router.message(DepositStates.player_id)
 async def deposit_player_id(message: Message, state: FSMContext):
     player_id = message.text.strip()
-    if not (2 <= len(player_id) <= 50):
-        await message.answer("ID 2 dan 50 tagacha belgidan iborat bo'lishi kerak. Qayta urinib ko'ring:")
+    if not (2 <= len(player_id) <= 20):
+        await message.answer("ID 2 dan 20 tagacha raqamdan iborat bo'lishi kerak. Qayta urinib ko'ring:")
         return
     
     await state.update_data(player_id=player_id)
@@ -272,13 +272,13 @@ async def deposit_amount_manual(message: Message, state: FSMContext):
 @router.callback_query(DepositStates.confirm, F.data == "paid")
 async def deposit_paid(callback: CallbackQuery, state: FSMContext):
     await state.set_state(DepositStates.screenshot)
-    await callback.message.edit_text("📸 Skrinshotni (chekni) yuboring.", reply_markup=None)
+    await callback.message.edit_text("📸 Chekni yuboring.", reply_markup=None)
     await callback.answer()
 
 @router.callback_query(DepositStates.confirm, F.data == "cancel_order")
 async def deposit_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Buyurtma bekor qilindi.", reply_markup=None)
+    await callback.message.edit_text("❌ Bekor qilindi.", reply_markup=None)
     await callback.message.answer("Amalni tanlang:", reply_markup=main_menu_kb())
     await callback.answer()
 
@@ -347,8 +347,8 @@ async def deposit_screenshot_invalid(message: Message):
 @router.message(WithdrawStates.player_id)
 async def withdraw_player_id(message: Message, state: FSMContext):
     player_id = message.text.strip()
-    if not (2 <= len(player_id) <= 50):
-        await message.answer("ID 2 dan 50 tagacha belgidan iborat bo'lishi kerak. Qayta urinib ko'ring:")
+    if not (2 <= len(player_id) <= 20):
+        await message.answer("ID 2 dan 20 tagacha raqamdan iborat bo'lishi kerak. Qayta urinib ko'ring:")
         return
     await state.update_data(player_id=player_id)
     await state.set_state(WithdrawStates.card_number)
@@ -358,8 +358,8 @@ async def withdraw_player_id(message: Message, state: FSMContext):
 async def withdraw_card_number(message: Message, state: FSMContext):
     card = message.text.strip()
     card_clean = card.replace(" ", "")
-    if not card_clean.isdigit() or len(card_clean) < 10:
-        await message.answer("To'g'ri karta raqamini kiriting (faqat raqamlar).")
+    if not card_clean.isdigit() or len(card_clean) < 15:
+        await message.answer("To'g'ri karta raqamini kiriting.")
         return
     
     await state.update_data(withdraw_card=card)
@@ -370,8 +370,8 @@ async def withdraw_card_number(message: Message, state: FSMContext):
         f"ID: {data['player_id']}\n"
         f"Karta: {card}\n"
         f"Valyuta: {data.get('currency', 'UZS')}\n\n"
-        f"🏦 Kassa manzili: Karshi shahri, G'ang'a orientiri (24/7)\n\n"
-        f"Pulni olganingizdan so'ng «✅ To'lov qildim» tugmasini bosing.",
+        f"🏦 Kassa manzili: город Карши, улица Ориентир Ганга (24/7)\n\n"
+        f"Pulni junatganizdan so'ng «✅ To'lov qildim» tugmasini bosing.",
         reply_markup=withdraw_confirm_kb()
     )
     await state.set_state(WithdrawStates.confirm)
@@ -379,7 +379,7 @@ async def withdraw_card_number(message: Message, state: FSMContext):
 @router.callback_query(WithdrawStates.confirm, F.data == "withdraw_sent")
 async def withdraw_sent(callback: CallbackQuery, state: FSMContext):
     await state.set_state(WithdrawStates.screenshot)
-    await callback.message.edit_text("📸 Chek skrinshotini yuboring.", reply_markup=None)
+    await callback.message.edit_text("📸 Chekni yuboring.", reply_markup=None)
     await callback.answer()
 
 @router.callback_query(WithdrawStates.confirm, F.data == "cancel_order")
@@ -398,7 +398,7 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
         file_id = message.document.file_id
         is_doc = True
     else:
-        await message.answer("Iltimos, chek rasmini yuboring.")
+        await message.answer("Iltimos, chekni yuboring.")
         return
 
     data = await state.get_data()
@@ -448,4 +448,4 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
 
 @router.message(WithdrawStates.screenshot)
 async def withdraw_screenshot_invalid(message: Message):
-    await message.answer("Iltimos, chek rasmini yuboring.")
+    await message.answer("Iltimos, chekni yuboring.")
