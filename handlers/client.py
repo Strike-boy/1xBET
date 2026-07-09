@@ -178,7 +178,7 @@ async def currency_selected(callback: CallbackQuery, state: FSMContext):
 async def cancel_action(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.delete()
-    await callback.message.answer("Действие отменено.", reply_markup=main_menu_kb())
+    await callback.message.answer("Bekor qilindi.", reply_markup=main_menu_kb())
     await callback.answer()
 
 # ------------------- Обработчики пополнения: сумма -------------------
