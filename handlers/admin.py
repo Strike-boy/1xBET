@@ -32,10 +32,10 @@ async def order_done(callback: CallbackQuery, bot: Bot):
     order = await db.get_order(order_id)
     
     if not order:
-        await callback.answer("Заказ не найден.", show_alert=True)
+        await callback.answer("Zakaz topilmadi.", show_alert=True)
         return
     if order["status"] != "checking":
-        await callback.answer("Этот заказ уже обработан.", show_alert=True)
+        await callback.answer("Bu zakaz bajarib bo'lingan.", show_alert=True)
         return
 
     await db.update_status(order_id, "done")
@@ -43,27 +43,27 @@ async def order_done(callback: CallbackQuery, bot: Bot):
 
     # Уведомление клиенту
     try:
-        text = f"✅ Ваш заказ #{order_id} одобрен!\n"
+        text = f"✅ Sizning zakazingiz #{order_id} qabul qilindi!\n"
         if order['order_type'] == 'deposit':
-            text += f"Средства зачислены на ID {order['player_id']}.\n"
+            text += f"Pullaringiz tushdi, ID: {order['player_id']}.\n"
         else:
-            text += f"Средства отправлены на карту {order.get('withdraw_card', 'указанную')}.\n"
-        text += f"Дата обработки: {now}"
+            text += f"Pul o'tkazildi, karta: {order.get('withdraw_card', 'указанную')}.\n"
+        text += f"Vaqt: {now}"
         await bot.send_message(chat_id=order["chat_id"], text=text)
     except Exception:
-        logger.exception("Не удалось уведомить клиента #%s", order_id)
+        logger.exception("Klientdi habar qilib bo'lmadi #%s", order_id)
 
     # Обновляем сообщение в админ-чате
     admin_name = f"@{callback.from_user.username}" if callback.from_user.username else callback.from_user.full_name
     old_caption = callback.message.caption or ""
-    new_caption = f"{old_caption}\n\n✅ Одобрено (админ {admin_name}) в {now}"
+    new_caption = f"{old_caption}\n\n✅ Tasdiqlandi (админ {admin_name}) в {now}"
     
     try:
         await callback.message.edit_caption(caption=new_caption, reply_markup=None)
     except Exception:
-        logger.exception("Не удалось обновить сообщение в админ-чате #%s", order_id)
+        logger.exception("Admin-chatda habarni yangilab bo'lmadi #%s", order_id)
 
-    await callback.answer("Заказ одобрен ✅")
+    await callback.answer("Zakaz tasdiqlandi ✅")
 
 @router.callback_query(F.data.startswith("cancel:"))
 async def order_cancel_start(callback: CallbackQuery):
@@ -75,16 +75,16 @@ async def order_cancel_start(callback: CallbackQuery):
     order = await db.get_order(order_id)
     
     if not order:
-        await callback.answer("Заказ не найден.", show_alert=True)
+        await callback.answer("Zakaz topilmadi.", show_alert=True)
         return
     if order["status"] != "checking":
-        await callback.answer("Этот заказ уже обработан.", show_alert=True)
+        await callback.answer("Bu zakaz bajarib bo'lingan.", show_alert=True)
         return
     
     pending_comments[callback.from_user.id] = order_id
     await callback.message.answer(
-        "Введите причину отклонения (текст). После отправки заказ будет отклонён.\n"
-        "Или отправьте /skip, чтобы отклонить без комментария."
+        "Rad etish sababini yozing!\n"
+        "Yoki bo'sh qoldirish uchun /skip ni bsoing."
     )
     await callback.answer()
 
@@ -95,7 +95,7 @@ async def skip_comment(message: Message):
     
     admin_id = message.from_user.id
     if admin_id not in pending_comments:
-        await message.answer("Нет активного отклонения.")
+        await message.answer("Aktiv rad etishla yo'q.")
         return
     
     order_id = pending_comments.pop(admin_id)
@@ -118,7 +118,7 @@ async def receive_comment(message: Message):
     comment = message.text.strip()
     
     if not comment:
-        await message.answer("Комментарий не может быть пустым. Введите текст или /skip.")
+        await message.answer("Kommentariya bo'sh bo'lishi mumkun emas. Tekst yozing yoki /skip ni bosing.")
         pending_comments[admin_id] = order_id
         return
     
@@ -127,7 +127,7 @@ async def receive_comment(message: Message):
 async def finalize_cancel(order_id: int, admin_id: int, comment: str | None, bot: Bot, source_msg: Message):
     order = await db.get_order(order_id)
     if not order:
-        await source_msg.answer("Заказ не найден.")
+        await source_msg.answer("Zakas topilmadi.")
         return
     
     await db.update_status(order_id, "cancelled", admin_comment=comment)
@@ -136,13 +136,13 @@ async def finalize_cancel(order_id: int, admin_id: int, comment: str | None, bot
 
     # Уведомление клиенту
     try:
-        text = f"❌ Ваш заказ #{order_id} отклонён.\nДата: {now}\n"
+        text = f"❌ Sizning zakasingiz #{order_id} rad qilindi.\nДата: {now}\n"
         if comment:
-            text += f"Причина: {comment}\n"
-        text += f"Свяжитесь с администратором: {config.ADMIN_CONTACTS}"
+            text += f"Sababi: {comment}\n"
+        text += f"Admin bilan bog'laning: {config.ADMIN_CONTACTS}"
         await bot.send_message(chat_id=order["chat_id"], text=text)
     except Exception:
-        logger.exception("Не удалось уведомить клиента об отклонении #%s", order_id)
+        logger.exception("Klientdi zakazdi rad bo'lganligi haqida habar qilib bo'lmadi. #%s", order_id)
 
     # Обновляем сообщение в админ-чате
     admin_msg_id = order.get("admin_message_id")
@@ -151,8 +151,8 @@ async def finalize_cancel(order_id: int, admin_id: int, comment: str | None, bot
             old_caption = source_msg.caption or ""
             new_caption = (
                 f"{old_caption}\n\n"
-                f"❌ Отклонено (админ {admin_name}) в {now}\n"
-                f"Комментарий: {comment or 'не указан'}"
+                f"❌ Rad qilindi (админ {admin_name}) в {now}\n"
+                f"Sababi: {comment or 'не указан'}"
             )
             await bot.edit_message_caption(
                 chat_id=config.ADMIN_CHAT_ID,
@@ -161,9 +161,9 @@ async def finalize_cancel(order_id: int, admin_id: int, comment: str | None, bot
                 reply_markup=None
             )
         except Exception:
-            logger.exception("Не удалось обновить сообщение админа #%s", order_id)
+            logger.exception("Admin habarini yangilab bo'lmadi #%s", order_id)
 
-    await source_msg.answer("Заказ отклонён ❌")
+    await source_msg.answer("Zakaz rad qilindi ❌")
     pending_comments.pop(admin_id, None)
 
 # ------------------- Команды админа -------------------
@@ -174,12 +174,12 @@ async def cmd_setcard(message: Message):
     
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
-        await message.answer("Использование:\n/setcard 1234 5678 9012 3456")
+        await message.answer("Ishlatilishi:\n/setcard 1234 5678 9012 3456")
         return
     
     new_card = parts[1].strip()
     await db.set_card_number(new_card)
-    await message.answer(f"✅ Номер карты обновлён:\n{new_card}")
+    await message.answer(f"✅ Karta raqami yangilandi:\n{new_card}")
 
 @router.message(Command("orders"))
 async def cmd_orders(message: Message):
@@ -188,10 +188,10 @@ async def cmd_orders(message: Message):
     
     orders = await db.get_checking_orders()
     if not orders:
-        await message.answer("Активных заказов нет. 🎉")
+        await message.answer("Aktiv zakazlar yo'q. 🎉")
         return
     
-    lines = ["📋 Активные заказы (в проверке):\n"]
+    lines = ["📋 Aktiv zakazlar (tekshiruvda):\n"]
     for o in orders:
         lines.append(f"#{o['id']} — {o['amount']:,} {o['currency']}, ID: {o['player_id']}, от {o['username']} ({o['order_type']})")
     await message.answer("\n".join(lines))
@@ -206,16 +206,16 @@ async def cmd_history(message: Message):
     today = datetime.now(UZ_TZ).strftime("%Y-%m-%d")
     
     await message.answer(
-        f"📊 История заказов на {today}:\n"
+        f"📊 Bugungi zakazlar {today}:\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"✅ Принято: {stats['done']}\n"
-        f"❌ Отклонено: {stats['cancelled']}\n"
-        f"⏳ В ожидании: {stats['checking']}\n"
+        f"✅ Qabul qilindi: {stats['done']}\n"
+        f"❌ Rad etildi: {stats['cancelled']}\n"
+        f"⏳ Tekshirilmoqda: {stats['checking']}\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"📦 Всего за сегодня: {stats['today']}\n"
+        f"📦 Bugunga: {stats['today']}\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"💰 Выводов (выполнено): {stats.get('withdraw_done', 0)}\n"
-        f"⏳ Выводов (в ожидании): {stats.get('withdraw_checking', 0)}"
+        f"💰 Chiqim (bajarildi): {stats.get('withdraw_done', 0)}\n"
+        f"⏳ Chiqim (kutilmoqda): {stats.get('withdraw_checking', 0)}"
     )
 
 @router.message(Command("stats"))
@@ -225,12 +225,12 @@ async def cmd_stats(message: Message):
     
     stats = await db.get_stats()
     await message.answer(
-        "📊 Статистика заказов:\n"
-        f"Сегодня: {stats['today']}\n"
-        f"Всего: {stats['total']}\n"
-        f"✅ Выполнено: {stats['done']}\n"
-        f"❌ Отклонено: {stats['cancelled']}\n"
-        f"⏳ В проверке: {stats['checking']}\n"
-        f"💰 Выводов выполнено: {stats.get('withdraw_done', 0)}\n"
-        f"⏳ Выводов в проверке: {stats.get('withdraw_checking', 0)}"
+        "📊 Zakazlar statistikasi:\n"
+        f"Bugun: {stats['today']}\n"
+        f"Jami: {stats['total']}\n"
+        f"✅ Bajarildi: {stats['done']}\n"
+        f"❌ Rad etildi: {stats['cancelled']}\n"
+        f"⏳ Tekshiruvda: {stats['checking']}\n"
+        f"💰 Bajarilgan chiqimlar: {stats.get('withdraw_done', 0)}\n"
+        f"⏳ Tekshiruvdagi chiqimlar: {stats.get('withdraw_checking', 0)}"
     )
