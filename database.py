@@ -123,7 +123,7 @@ async def get_checking_orders_older_than(minutes: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cursor = await conn.execute(
-            "SELECT * FROM orders WHERE status = 'checking' AND julianday('now') - julianday(created_at) * 24*60 > ?",
+            "SELECT * FROM orders WHERE status = 'checking' AND (julianday('now') - julianday(created_at)) * 24 * 60 > ?",
             (minutes,)
         )
         rows = await cursor.fetchall()
