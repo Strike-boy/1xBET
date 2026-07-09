@@ -17,7 +17,7 @@ async def remind_admins(bot: Bot):
             orders = await db.get_checking_orders_older_than(minutes=5)
             if orders:
                 ids = [str(o['id']) for o in orders]
-                text = f"⏳ Напоминание: есть необработанные заказы: #{', #'.join(ids)}"
+                text = f"⏳Eslatma: bajarilmagan zakazlar bor: #{', #'.join(ids)}"
                 await bot.send_message(config.ADMIN_CHAT_ID, text)
         except Exception as e:
-            logger.exception("Ошибка в напоминании админам: %s", e)
+            logger.exception("Adminlar eslatmasida xatolik: %s", e)
