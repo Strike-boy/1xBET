@@ -40,9 +40,9 @@ class WithdrawStates(StatesGroup):
 def main_menu_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="💳 Пополнить")],
-            [KeyboardButton(text="💸 Вывести")],
-            [KeyboardButton(text="📞 Связь с админом")]
+            [KeyboardButton(text="📥 Hisobni to'ldirish")],
+            [KeyboardButton(text="📤 Pul yechish")],
+            [KeyboardButton(text="👨🏻‍💻 Admin Aloqa")]
         ],
         resize_keyboard=True
     )
@@ -53,7 +53,7 @@ def currency_kb():
         inline_keyboard=[
             [InlineKeyboardButton(text="🇺🇿 UZS", callback_data="currency_uzs"),
              InlineKeyboardButton(text="🇺🇸 USD", callback_data="currency_usd")],
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]
+            [InlineKeyboardButton(text="🚫 Bekor qilish", callback_data="cancel_action")]
         ]
     )
 
@@ -62,7 +62,7 @@ def amount_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="50 000"), KeyboardButton(text="100 000"), KeyboardButton(text="150 000")],
-            [KeyboardButton(text="300 000"), KeyboardButton(text="500 000"), KeyboardButton(text="Другая сумма")]
+            [KeyboardButton(text="300 000"), KeyboardButton(text="500 000"), KeyboardButton(text="Boshqa summa")]
         ],
         resize_keyboard=True
     )
@@ -70,16 +70,16 @@ def amount_kb():
 def confirm_payment_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Оплатил", callback_data="paid")],
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_order")]
+            [InlineKeyboardButton(text="✅ To'lov qildim", callback_data="paid")],
+            [InlineKeyboardButton(text="🚫 Bekor qilish", callback_data="cancel_order")]
         ]
     )
 
 def withdraw_confirm_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Отправил", callback_data="withdraw_sent")],
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_order")]
+            [InlineKeyboardButton(text="✅ To'lov qildim", callback_data="withdraw_sent")],
+            [InlineKeyboardButton(text="🚫 Bekor qilish", callback_data="cancel_order")]
         ]
     )
 
@@ -88,46 +88,51 @@ def withdraw_confirm_kb():
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "👋 Привет! Добро пожаловать в наш сервис.\n"
-        "Выберите действие:",
+        "Assalomu alaykum! 🖐️\n"
+        "Onlayn kassamizga xush kelibsiz!\n"
+        "\n"
+        "💳 Toʻldirishlar — 0% komissiya\n"
+        "⚡️ Jarayon juda sodda va tez\n"
+        "📱 Bir necha soniya ichida hisobingiz toʻldiriladi\n",
         reply_markup=main_menu_kb()
     )
 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("❌ Действие отменено.", reply_markup=main_menu_kb())
+    await message.answer("❌ Bekor qilindi.", reply_markup=main_menu_kb())
 
 # ------------------- Главное меню -------------------
-@router.message(F.text == "💳 Пополнить")
+@router.message(F.text == "📥 Hisobni to'ldirish")
 async def deposit_start(message: Message, state: FSMContext):
     # Проверка на активный заказ
     active = await db.get_active_order(message.from_user.id)
     if active:
-        await message.answer(f"⏳ У вас уже есть активный заказ (№{active['id']}). Дождитесь его обработки.")
+        await message.answer(f"⏳ Sizda aktiv zakaz bor (№{active['id']}). Kutib to'ring.")
         return
     await state.set_state(DepositStates.currency)
-    await message.answer("Выберите валюту для пополнения:", reply_markup=currency_kb())
+    await message.answer("🇺🇿So`mli yoki 🇺🇸Dollarli hisobni tanlang:", reply_markup=currency_kb())
 
-@router.message(F.text == "💸 Вывести")
+@router.message(F.text == "📤 Pul yechish")
 async def withdraw_start(message: Message, state: FSMContext):
     active = await db.get_active_order(message.from_user.id)
     if active:
-        await message.answer(f"⏳ У вас уже есть активный заказ (№{active['id']}). Дождитесь его обработки.")
+        await message.answer(f"⏳ Sizda aktiv zakaz bor (№{active['id']}). Kutib to'ring.")
         return
     await state.set_state(WithdrawStates.currency)
-    await message.answer("Выберите валюту вывода:", reply_markup=currency_kb())
+    await message.answer("🇺🇿So`mli yoki 🇺🇸Dollarli hisobni tanlang:", reply_markup=currency_kb())
 
-@router.message(F.text == "📞 Связь с админом")
+@router.message(F.text == "👨🏻‍💻 Admin Aloqa")
 async def contact_admin(message: Message):
     # Отправляем контакты с кнопкой для перехода
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📩 Написать админу", url=f"https://t.me/{config.ADMIN_CONTACTS.lstrip('@')}")]
+            [InlineKeyboardButton(text="👨🏻‍💻 Operator", url=f"https://t.me/{config.ADMIN_CONTACTS.lstrip('@')}")]
         ]
     )
     await message.answer(
-        "По всем вопросам обращайтесь к администратору:\n"
+        "Pul tushmadimi operatorga chekni junating:\n\n"
+        "Muammo yoki savol bo'lsa yozing!"
         f"{config.ADMIN_CONTACTS}",
         reply_markup=kb
     )
@@ -143,7 +148,9 @@ async def currency_selected(callback: CallbackQuery, state: FSMContext):
         await state.set_state(DepositStates.amount)
         await callback.message.delete()
         await callback.message.answer(
-            "Введите сумму пополнения (только цифры) или выберите быструю сумму:",
+            "Minimal: 50.000 UZS\n"
+            "Maksimal: 100.000.000 UZS\n\n"
+            "Summani yozing‼️:",
             reply_markup=amount_kb()
         )
     elif current_state == WithdrawStates.currency.state:
