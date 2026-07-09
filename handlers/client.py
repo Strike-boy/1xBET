@@ -23,14 +23,13 @@ router = Router()
 # ------------------- FSM состояния -------------------
 class DepositStates(StatesGroup):
     currency = State()        # выбор валюты
-    amount = State()          # ввод суммы или выбор кнопки
     player_id = State()       # ID игрока
+    amount = State()          # ввод суммы или выбор кнопки
     confirm = State()         # подтверждение оплаты
     screenshot = State()      # скриншот
 
 class WithdrawStates(StatesGroup):
     currency = State()        # выбор валюты
-    video_shown = State()     # после показа видео
     player_id = State()       # ID игрока
     card_number = State()     # карта для вывода
     confirm = State()         # подтверждение отправки
@@ -105,7 +104,6 @@ async def cmd_cancel(message: Message, state: FSMContext):
 # ------------------- Главное меню -------------------
 @router.message(F.text == "📥 Hisobni to'ldirish")
 async def deposit_start(message: Message, state: FSMContext):
-    # Проверка на активный заказ
     active = await db.get_active_order(message.from_user.id)
     if active:
         await message.answer(f"⏳ Sizda aktiv zakaz bor (№{active['id']}). Kutib to'ring.")
@@ -124,7 +122,6 @@ async def withdraw_start(message: Message, state: FSMContext):
 
 @router.message(F.text == "👨🏻‍💻 Admin Aloqa")
 async def contact_admin(message: Message):
-    # Отправляем контакты с кнопкой для перехода
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="👨🏻‍💻 Operator", url=f"https://t.me/{config.ADMIN_CONTACTS.lstrip('@')}")]
@@ -140,22 +137,18 @@ async def contact_admin(message: Message):
 # ------------------- Обработчики выбора валюты (инлайн) -------------------
 @router.callback_query(F.data.startswith("currency_"))
 async def currency_selected(callback: CallbackQuery, state: FSMContext):
-    currency = callback.data.split("_")[1].upper()  # UZS или USD
+    currency = callback.data.split("_")[1].upper()
     await state.update_data(currency=currency)
     current_state = await state.get_state()
     
     if current_state == DepositStates.currency.state:
-        await state.set_state(DepositStates.amount)
+        await state.set_state(DepositStates.player_id)
         await callback.message.delete()
         await callback.message.answer(
-            "Minimal: 50.000 UZS\n"
-            "Maksimal: 100.000.000 UZS\n\n"
-            "Summani yozing‼️:",
-            reply_markup=amount_kb()
+            "🎮 Iltimos, o'yinchi ID'ingizni kiriting:"
         )
     elif current_state == WithdrawStates.currency.state:
-        # Для вывода – показываем видеоинструкцию, если есть
-        await state.set_state(WithdrawStates.video_shown)
+        await state.set_state(WithdrawStates.player_id)
         await callback.message.delete()
         if config.WITHDRAW_VIDEO_FILE_ID:
             try:
@@ -165,13 +158,12 @@ async def currency_selected(callback: CallbackQuery, state: FSMContext):
                 )
             except Exception:
                 await callback.message.answer(
-                    "ID kiriting:"
+                    "🎮 Iltimos, o'yinchi ID'ingizni kiriting:"
                 )
         else:
             await callback.message.answer(
-                "ID kiriting:"
+                "🎮 Iltimos, o'yinchi ID'ingizni kiriting:"
             )
-        await state.set_state(WithdrawStates.player_id)
     await callback.answer()
 
 @router.callback_query(F.data == "cancel_action")
@@ -181,18 +173,35 @@ async def cancel_action(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("Bekor qilindi.", reply_markup=main_menu_kb())
     await callback.answer()
 
+# ------------------- Пополнение: ID игрока -------------------
+@router.message(DepositStates.player_id)
+async def deposit_player_id(message: Message, state: FSMContext):
+    player_id = message.text.strip()
+    if not (2 <= len(player_id) <= 50):
+        await message.answer("ID 2 dan 50 tagacha belgidan iborat bo'lishi kerak. Qayta urinib ko'ring:")
+        return
+    
+    await state.update_data(player_id=player_id)
+    await state.set_state(DepositStates.amount)
+    
+    await message.answer(
+        f"💰 Minimal: 50.000 UZS\n"
+        f"💰 Maksimal: 100.000.000 UZS\n\n"
+        f"Summani yozing‼️:",
+        reply_markup=amount_kb()
+    )
+
 # ------------------- Обработчики пополнения: сумма -------------------
-@router.message(DepositStates.amount, F.text.regexp(r'^[\d\s]+$'))  # цифры и пробелы
+@router.message(DepositStates.amount, F.text.regexp(r'^[\d\s]+$'))
 async def deposit_amount(message: Message, state: FSMContext):
     text = message.text.strip().replace(" ", "")
     
-    # Если нажали кнопку "Другая сумма"
     if text == "Boshqa summa" or text == "Boshqa":
         await message.answer("Summa kiriting:")
         return
     
     if not text.isdigit():
-        await message.answer("To'gri summa kiriting.")
+        await message.answer("To'g'ri summa kiriting.")
         return
     
     amount = int(text)
@@ -203,64 +212,58 @@ async def deposit_amount(message: Message, state: FSMContext):
         await message.answer("Maksimal summa 100 000 000 UZS.")
         return
     
-    # Для быстрых кнопок генерируем хвост
     extra = generate_extra_amount()
     total = amount + extra
     await state.update_data(amount=amount, extra=extra, total=total)
-    await state.set_state(DepositStates.player_id)
     
-    # Показываем сумму с хвостом
+    data = await state.get_data()
     card = await db.get_card_number()
+    
+    # Формируем красивое сообщение как в примере
     await message.answer(
-        f"💳 Переведите **{total:,}** {await state.get_value('currency', 'UZS')} на карту:\n{card}\n\n"
-        f"Ваш идентификатор: +{extra} (для быстрой проверки)\n"
-        f"После перевода введите ID игрока:",
-        reply_markup=ReplyKeyboardRemove()
+        f"#{message.message_id}\n"
+        f"🆔ID {data.get('currency', 'UZS')} 🇺🇿: {data['player_id']}\n"
+        f"💰Komissiya: 0%\n"
+        f"💵{data.get('currency', 'UZS')} 🇺🇿 tushadi: {total:,}\n\n"
+        f"{total:,} {data.get('currency', 'UZS')} pulni {card} karta raqamga o'tkazing va\n\n"
+        f"Diqqat noto'g'ri o'tqazmang, tushmaydi aks holda ‼️\n"
+        f"Arizada ko'rsatilgan summani o'tqazing ‼️\n\n"
+        f"(To'lov qildim) tugmasiga bosing‼ ✅",
+        reply_markup=confirm_payment_kb()
     )
+    await state.set_state(DepositStates.confirm)
 
-# Обработка ручного ввода суммы
 @router.message(DepositStates.amount)
 async def deposit_amount_manual(message: Message, state: FSMContext):
     text = message.text.strip().replace(" ", "")
     if not text.isdigit():
-        await message.answer("Введите корректное число.")
+        await message.answer("To'g'ri son kiriting.")
         return
     
     amount = int(text)
     if amount < 50000:
-        await message.answer("Минимальная сумма 50 000 UZS.")
+        await message.answer("Minimal summa 50 000 UZS.")
         return
     if amount > 100000000:
-        await message.answer("Максимальная сумма 100 000 000 UZS.")
+        await message.answer("Maksimal summa 100 000 000 UZS.")
         return
     
-    # При ручном вводе хвост не добавляем
-    await state.update_data(amount=amount, extra=0, total=amount)
-    await state.set_state(DepositStates.player_id)
-    
-    card = await db.get_card_number()
-    await message.answer(
-        f"💳 Переведите **{amount:,}** UZS на карту:\n{card}\n\n"
-        f"После перевода введите ID игрока:",
-        reply_markup=ReplyKeyboardRemove()
-    )
-
-# ------------------- Пополнение: ID игрока -------------------
-@router.message(DepositStates.player_id)
-async def deposit_player_id(message: Message, state: FSMContext):
-    player_id = message.text.strip()
-    if not (2 <= len(player_id) <= 50):
-        await message.answer("ID должен содержать от 2 до 50 символов. Попробуйте снова:")
-        return
+    extra = generate_extra_amount()
+    total = amount + extra
+    await state.update_data(amount=amount, extra=extra, total=total)
     
     data = await state.get_data()
-    await state.update_data(player_id=player_id)
+    card = await db.get_card_number()
     
     await message.answer(
-        f"📋 Проверьте данные:\n"
-        f"Сумма: {data.get('total', data.get('amount', 0)):,} {data.get('currency', 'UZS')}\n"
-        f"ID игрока: {player_id}\n\n"
-        f"Если всё верно, нажмите «✅ Оплатил» после перевода.",
+        f"#{message.message_id}\n"
+        f"🆔ID {data.get('currency', 'UZS')} 🇺🇿: {data['player_id']}\n"
+        f"💰Komissiya: 0%\n"
+        f"💵{data.get('currency', 'UZS')} 🇺🇿 tushadi: {total:,}\n\n"
+        f"{total:,} {data.get('currency', 'UZS')} pulni {card} karta raqamga o'tkazing va\n\n"
+        f"Diqqat noto'g'ri o'tqazmang, tushmaydi aks holda ‼️\n"
+        f"Arizada ko'rsatilgan summani o'tqazing ‼️\n\n"
+        f"(To'lov qildim) tugmasiga bosing‼ ✅",
         reply_markup=confirm_payment_kb()
     )
     await state.set_state(DepositStates.confirm)
@@ -269,14 +272,14 @@ async def deposit_player_id(message: Message, state: FSMContext):
 @router.callback_query(DepositStates.confirm, F.data == "paid")
 async def deposit_paid(callback: CallbackQuery, state: FSMContext):
     await state.set_state(DepositStates.screenshot)
-    await callback.message.edit_text("📸 Отправьте скриншот чека (фото или документ).", reply_markup=None)
+    await callback.message.edit_text("📸 Skrinshotni (chekni) yuboring.", reply_markup=None)
     await callback.answer()
 
 @router.callback_query(DepositStates.confirm, F.data == "cancel_order")
 async def deposit_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Заказ отменён.", reply_markup=None)
-    await callback.message.answer("Выберите действие:", reply_markup=main_menu_kb())
+    await callback.message.edit_text("❌ Buyurtma bekor qilindi.", reply_markup=None)
+    await callback.message.answer("Amalni tanlang:", reply_markup=main_menu_kb())
     await callback.answer()
 
 # ------------------- Получение скриншота (пополнение) -------------------
@@ -289,7 +292,7 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
         file_id = message.document.file_id
         is_doc = True
     else:
-        await message.answer("Пожалуйста, отправьте изображение.")
+        await message.answer("Iltimos, rasm yuboring.")
         return
 
     data = await state.get_data()
@@ -307,21 +310,20 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
         order_type='deposit'
     )
 
-    # Отправляем админам
     caption = (
-        f"🆕 Заказ #{order_id} (пополнение)\n"
-        f"Сумма: {data.get('total', data['amount']):,} {data.get('currency', 'UZS')}\n"
+        f"🆕 Zakaz #{order_id} (to'ldirish)\n"
+        f"Summa: {data.get('total', data['amount']):,} {data.get('currency', 'UZS')}\n"
         f"ID: {data['player_id']}\n"
-        f"От: {username} (id: {message.from_user.id})\n"
-        f"Валюта: {data.get('currency', 'UZS')}\n"
-        f"🕒 Создан: {datetime.now(UZ_TZ).strftime('%Y-%m-%d %H:%M')}\n"
-        f"Статус: ⏳ проверка"
+        f"Kimdan: {username} (id: {message.from_user.id})\n"
+        f"Valyuta: {data.get('currency', 'UZS')}\n"
+        f"🕒 Yaratilgan: {datetime.now(UZ_TZ).strftime('%Y-%m-%d %H:%M')}\n"
+        f"Holati: ⏳ tekshiruv"
     )
     
     admin_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Одобрить", callback_data=f"done:{order_id}"),
-             InlineKeyboardButton(text="❌ Отклонить", callback_data=f"cancel:{order_id}")]
+            [InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"done:{order_id}"),
+             InlineKeyboardButton(text="❌ Bekor qilish", callback_data=f"cancel:{order_id}")]
         ]
     )
     
@@ -332,44 +334,44 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
             msg = await bot.send_photo(config.ADMIN_CHAT_ID, file_id, caption=caption, reply_markup=admin_kb)
         await db.set_admin_message_id(order_id, msg.message_id)
     except Exception:
-        logger.exception("Не удалось отправить заказ админам #%s", order_id)
+        logger.exception("Zakaz #%s adminlarga yuborilmadi", order_id)
 
-    await message.answer("✅ Заказ принят! Ожидайте подтверждения.", reply_markup=main_menu_kb())
+    await message.answer("✅ Buyurtma qabul qilindi! Tasdiqlashni kuting.", reply_markup=main_menu_kb())
     await state.clear()
 
 @router.message(DepositStates.screenshot)
 async def deposit_screenshot_invalid(message: Message):
-    await message.answer("Пожалуйста, отправьте изображение чека.")
+    await message.answer("Iltimos, chek rasmini yuboring.")
 
 # ------------------- Сценарий вывода -------------------
 @router.message(WithdrawStates.player_id)
 async def withdraw_player_id(message: Message, state: FSMContext):
     player_id = message.text.strip()
     if not (2 <= len(player_id) <= 50):
-        await message.answer("ID должен содержать от 2 до 50 символов. Попробуйте снова:")
+        await message.answer("ID 2 dan 50 tagacha belgidan iborat bo'lishi kerak. Qayta urinib ko'ring:")
         return
     await state.update_data(player_id=player_id)
     await state.set_state(WithdrawStates.card_number)
-    await message.answer("Введите номер карты, на которую хотите вывести средства:")
+    await message.answer("💳 Pul chiqarish uchun karta raqamingizni kiriting:")
 
 @router.message(WithdrawStates.card_number)
 async def withdraw_card_number(message: Message, state: FSMContext):
     card = message.text.strip()
     card_clean = card.replace(" ", "")
     if not card_clean.isdigit() or len(card_clean) < 10:
-        await message.answer("Введите корректный номер карты (только цифры).")
+        await message.answer("To'g'ri karta raqamini kiriting (faqat raqamlar).")
         return
     
     await state.update_data(withdraw_card=card)
     data = await state.get_data()
     
     await message.answer(
-        f"📋 Проверьте данные вывода:\n"
+        f"📋 Pul chiqarish ma'lumotlari:\n"
         f"ID: {data['player_id']}\n"
-        f"Карта: {card}\n"
-        f"Валюта: {data.get('currency', 'UZS')}\n\n"
-        f"🏦 Kassa manzili: город Карши, улица Ориентир Ганга (24/7)\n\n"
-        f"После получения средств нажмите «✅ Отправил».",
+        f"Karta: {card}\n"
+        f"Valyuta: {data.get('currency', 'UZS')}\n\n"
+        f"🏦 Kassa manzili: Karshi shahri, G'ang'a orientiri (24/7)\n\n"
+        f"Pulni olganingizdan so'ng «✅ To'lov qildim» tugmasini bosing.",
         reply_markup=withdraw_confirm_kb()
     )
     await state.set_state(WithdrawStates.confirm)
@@ -377,14 +379,14 @@ async def withdraw_card_number(message: Message, state: FSMContext):
 @router.callback_query(WithdrawStates.confirm, F.data == "withdraw_sent")
 async def withdraw_sent(callback: CallbackQuery, state: FSMContext):
     await state.set_state(WithdrawStates.screenshot)
-    await callback.message.edit_text("📸 Отправьте скриншот чека о переводе.", reply_markup=None)
+    await callback.message.edit_text("📸 Chek skrinshotini yuboring.", reply_markup=None)
     await callback.answer()
 
 @router.callback_query(WithdrawStates.confirm, F.data == "cancel_order")
 async def withdraw_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Вывод отменён.", reply_markup=None)
-    await callback.message.answer("Выберите действие:", reply_markup=main_menu_kb())
+    await callback.message.edit_text("❌ Pul chiqarish bekor qilindi.", reply_markup=None)
+    await callback.message.answer("Amalni tanlang:", reply_markup=main_menu_kb())
     await callback.answer()
 
 @router.message(WithdrawStates.screenshot, F.photo | F.document)
@@ -396,7 +398,7 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
         file_id = message.document.file_id
         is_doc = True
     else:
-        await message.answer("Отправьте изображение чека.")
+        await message.answer("Iltimos, chek rasmini yuboring.")
         return
 
     data = await state.get_data()
@@ -416,19 +418,19 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
     )
 
     caption = (
-        f"🆕 Заказ #{order_id} (вывод)\n"
+        f"🆕 Zakaz #{order_id} (pul chiqarish)\n"
         f"ID: {data['player_id']}\n"
-        f"Карта: {data['withdraw_card']}\n"
-        f"От: {username} (id: {message.from_user.id})\n"
-        f"Валюта: {data.get('currency', 'UZS')}\n"
-        f"🕒 Создан: {datetime.now(UZ_TZ).strftime('%Y-%m-%d %H:%M')}\n"
-        f"Статус: ⏳ проверка"
+        f"Karta: {data['withdraw_card']}\n"
+        f"Kimdan: {username} (id: {message.from_user.id})\n"
+        f"Valyuta: {data.get('currency', 'UZS')}\n"
+        f"🕒 Yaratilgan: {datetime.now(UZ_TZ).strftime('%Y-%m-%d %H:%M')}\n"
+        f"Holati: ⏳ tekshiruv"
     )
     
     admin_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Одобрить", callback_data=f"done:{order_id}"),
-             InlineKeyboardButton(text="❌ Отклонить", callback_data=f"cancel:{order_id}")]
+            [InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"done:{order_id}"),
+             InlineKeyboardButton(text="❌ Bekor qilish", callback_data=f"cancel:{order_id}")]
         ]
     )
     
@@ -439,11 +441,11 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
             msg = await bot.send_photo(config.ADMIN_CHAT_ID, file_id, caption=caption, reply_markup=admin_kb)
         await db.set_admin_message_id(order_id, msg.message_id)
     except Exception:
-        logger.exception("Не удалось отправить заявку на вывод админам #%s", order_id)
+        logger.exception("Pul chiqarish #%s adminlarga yuborilmadi", order_id)
 
-    await message.answer("✅ Заявка принята! Мы уведомим вас после проверки.", reply_markup=main_menu_kb())
+    await message.answer("✅ Ariza qabul qilindi! Tekshiruvdan so'ng xabar beramiz.", reply_markup=main_menu_kb())
     await state.clear()
 
 @router.message(WithdrawStates.screenshot)
 async def withdraw_screenshot_invalid(message: Message):
-    await message.answer("Отправьте изображение чека.")
+    await message.answer("Iltimos, chek rasmini yuboring.")
