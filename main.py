@@ -4,6 +4,7 @@ import os
 from threading import Thread
 from flask import Flask
 from aiogram import Bot, Dispatcher
+from aiogram.types import BotCommand
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
