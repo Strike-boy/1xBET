@@ -39,9 +39,13 @@ class WithdrawStates(StatesGroup):
 def main_menu_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📥 Hisobni to'ldirish")],
-            [KeyboardButton(text="📤 Pul yechish")],
-            [KeyboardButton(text="👨🏻‍💻 Admin Aloqa")]
+            [
+                KeyboardButton(text="📥 Hisobni to'ldirish"),
+                KeyboardButton(text="📤 Pul yechish")
+            ],
+            [
+                KeyboardButton(text="👨🏻‍💻 Admin Aloqa")
+            ]
         ],
         resize_keyboard=True
     )
