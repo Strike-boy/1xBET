@@ -37,19 +37,19 @@ async def main():
     await db.migrate_if_needed()
     logger.info("База данных готова (%s)", config.DB_PATH)
 
-bot = Bot(
-    token=config.BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-)
-
-await bot.set_my_commands([
-    BotCommand(
-        command="start",
-        description="🏠 Bosh menyu"
+    bot = Bot(
+        token=config.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
-])
 
-dp = Dispatcher(storage=MemoryStorage())
+    await bot.set_my_commands([
+        BotCommand(
+            command="start",
+            description="🏠 Bosh menyu"
+        )
+    ])
+
+    dp = Dispatcher(storage=MemoryStorage())
 
     # Подключаем middleware антифлуда
     dp.update.middleware(ThrottlingMiddleware(rate_limit=1.0))
