@@ -155,7 +155,7 @@ def build_history_text(orders: List[Dict], page: int, total_pages: int) -> Tuple
         day_orders = sorted(grouped[date_key], key=lambda x: x['created_at'], reverse=True)
         for order in day_orders:
             lines.append("")
-            lines.append(format_transaction_for_history(order))
+            lines.append(format_transaction_for_history(order, UZ_TZ))
     
     return "\n".join(lines), True
 
