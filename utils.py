@@ -2,6 +2,9 @@ import random
 import re
 from datetime import datetime, timedelta, timezone
 
+# Часовой пояс Узбекистана (UTC+5)
+UZ_TZ = timezone(timedelta(hours=5))
+
 # Месяцы на узбекском языке
 MONTHS_UZ = {
     1: 'Yanvar', 2: 'Fevral', 3: 'Mart', 4: 'Aprel',
@@ -166,12 +169,14 @@ def parse_datetime_with_tz(date_str: str, tz: timezone) -> datetime:
         else:
             dt = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
         
-        # Если datetime без часового пояса, добавляем указанный
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=tz)
+        # ВАЖНО: Если datetime уже имеет часовой пояс, просто конвертируем
+        if dt.tzinfo is not None:
+            return dt.astimezone(tz)
         
-        # Конвертируем в указанный часовой пояс если нужно
-        return dt.astimezone(tz)
+        # Если datetime без часового пояса, добавляем указанный
+        dt = dt.replace(tzinfo=tz)
+        return dt
+        
     except (ValueError, TypeError):
         return datetime.now(tz)
 
