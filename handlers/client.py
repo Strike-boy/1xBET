@@ -5,13 +5,13 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Router, F, Bot
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, ChatMemberUpdatedFilter, IS_NOT_MEMBER, IS_MEMBER
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton,
     ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton,
-    FSInputFile
+    FSInputFile, ChatMemberUpdated
 )
 
 import config
@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 UZ_TZ = timezone(timedelta(hours=5))
+
+# ------------------- Фильтр для исключения админ-чата -------------------
+class NotAdminChatFilter(F):
+    """Фильтр, который пропускает сообщения только НЕ из админ-чата"""
+    async def __call__(self, message: Message) -> bool:
+        return message.chat.id != config.ADMIN_CHAT_ID
 
 
 # ------------------- FSM состояния -------------------
@@ -119,8 +125,8 @@ def withdraw_confirm_kb():
     )
 
 
-# ------------------- Команда /start -------------------
-@router.message(CommandStart())
+# ------------------- Команда /start (только для клиентов) -------------------
+@router.message(CommandStart(), NotAdminChatFilter())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
@@ -134,14 +140,14 @@ async def cmd_start(message: Message, state: FSMContext):
     )
 
 
-@router.message(Command("cancel"))
+@router.message(Command("cancel"), NotAdminChatFilter())
 async def cmd_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("❌ Bekor qilindi.", reply_markup=main_menu_kb())
 
 
-# ------------------- Главное меню -------------------
-@router.message(F.text == "📥 Hisobni to'ldirish")
+# ------------------- Главное меню (только для клиентов) -------------------
+@router.message(F.text == "📥 Hisobni to'ldirish", NotAdminChatFilter())
 async def deposit_start(message: Message, state: FSMContext):
     active = await db.get_active_order(message.from_user.id)
     if active:
@@ -151,7 +157,7 @@ async def deposit_start(message: Message, state: FSMContext):
     await message.answer("Iltimos brokerni tanlang:", reply_markup=broker_kb())
 
 
-@router.message(F.text == "📤 Pul yechish")
+@router.message(F.text == "📤 Pul yechish", NotAdminChatFilter())
 async def withdraw_start(message: Message, state: FSMContext):
     active = await db.get_active_order(message.from_user.id)
     if active:
@@ -161,7 +167,7 @@ async def withdraw_start(message: Message, state: FSMContext):
     await message.answer("Iltimos brokerni tanlang:", reply_markup=broker_kb())
 
 
-@router.message(F.text == "👨🏻‍💻 Admin Aloqa")
+@router.message(F.text == "👨🏻‍💻 Admin Aloqa", NotAdminChatFilter())
 async def contact_admin(message: Message):
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -176,6 +182,7 @@ async def contact_admin(message: Message):
     )
 
 
+# ------------------- Обработчики callback (работают везде) -------------------
 @router.callback_query(F.data.startswith("broker_"))
 async def broker_selected(callback: CallbackQuery, state: FSMContext):
     broker = callback.data.replace("broker_", "")
@@ -195,7 +202,6 @@ async def broker_selected(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ------------------- Обработчики выбора валюты (инлайн) -------------------
 @router.callback_query(F.data.startswith("currency_"))
 async def currency_selected(callback: CallbackQuery, state: FSMContext):
     currency = callback.data.split("_")[1].upper()
@@ -230,8 +236,8 @@ async def cancel_action(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ------------------- Пополнение: ID игрока -------------------
-@router.message(DepositStates.player_id)
+# ------------------- Пополнение: ID игрока (только для клиентов) -------------------
+@router.message(DepositStates.player_id, NotAdminChatFilter())
 async def deposit_player_id(message: Message, state: FSMContext):
     player_id = message.text.strip()
     if not (2 <= len(player_id) <= 20):
@@ -249,8 +255,8 @@ async def deposit_player_id(message: Message, state: FSMContext):
     )
 
 
-# ------------------- Обработчики пополнения: сумма -------------------
-@router.message(DepositStates.amount)
+# ------------------- Обработчики пополнения: сумма (только для клиентов) -------------------
+@router.message(DepositStates.amount, NotAdminChatFilter())
 async def deposit_amount(message: Message, state: FSMContext):
     text = message.text.strip().replace(" ", "")
 
@@ -308,8 +314,8 @@ async def deposit_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ------------------- Получение скриншота (пополнение) -------------------
-@router.message(DepositStates.screenshot, F.photo | F.document)
+# ------------------- Получение скриншота (пополнение) (только для клиентов) -------------------
+@router.message(DepositStates.screenshot, F.photo | F.document, NotAdminChatFilter())
 async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
     if message.photo:
         file_id = message.photo[-1].file_id
@@ -367,13 +373,13 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
 
 
-@router.message(DepositStates.screenshot)
+@router.message(DepositStates.screenshot, NotAdminChatFilter())
 async def deposit_screenshot_invalid(message: Message):
     await message.answer("Iltimos, chek rasmini yuboring.")
 
 
-# ------------------- Сценарий вывода -------------------
-@router.message(WithdrawStates.player_id)
+# ------------------- Сценарий вывода (только для клиентов) -------------------
+@router.message(WithdrawStates.player_id, NotAdminChatFilter())
 async def withdraw_player_id(message: Message, state: FSMContext):
     player_id = message.text.strip()
     if not (2 <= len(player_id) <= 20):
@@ -384,7 +390,7 @@ async def withdraw_player_id(message: Message, state: FSMContext):
     await message.answer("💳 Pul chiqarish uchun karta raqamingizni kiriting:")
 
 
-@router.message(WithdrawStates.card_number)
+@router.message(WithdrawStates.card_number, NotAdminChatFilter())
 async def withdraw_card_number(message: Message, state: FSMContext):
     card = message.text.strip()
     card_clean = card.replace(" ", "")
@@ -423,7 +429,7 @@ async def withdraw_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(WithdrawStates.screenshot, F.photo | F.document)
+@router.message(WithdrawStates.screenshot, F.photo | F.document, NotAdminChatFilter())
 async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
     if message.photo:
         file_id = message.photo[-1].file_id
@@ -482,6 +488,6 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
 
 
-@router.message(WithdrawStates.screenshot)
+@router.message(WithdrawStates.screenshot, NotAdminChatFilter())
 async def withdraw_screenshot_invalid(message: Message):
     await message.answer("Iltimos, chekni yuboring.")
