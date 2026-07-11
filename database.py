@@ -27,7 +27,8 @@ async def init_db():
                 admin_comment TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP,
-                admin_message_id INTEGER
+                admin_message_id INTEGER,
+                card_used TEXT
             )
         """)
         await conn.execute("""
@@ -54,21 +55,23 @@ async def migrate_if_needed():
             await conn.execute("ALTER TABLE orders ADD COLUMN admin_comment TEXT")
         if "processed_at" not in columns:
             await conn.execute("ALTER TABLE orders ADD COLUMN processed_at TIMESTAMP")
+        if "card_used" not in columns:
+            await conn.execute("ALTER TABLE orders ADD COLUMN card_used TEXT")
         await conn.commit()
 
 async def create_order(user_id: int, chat_id: int, username: str, amount: int,
                        player_id: str, screenshot_file_id: str, currency: str = 'UZS',
                        order_type: str = 'deposit', extra_amount: int = 0,
-                       withdraw_card: str = None) -> int:
+                       withdraw_card: str = None, card_used: str = None) -> int:
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.execute(
             """
             INSERT INTO orders (user_id, chat_id, username, amount, extra_amount, player_id,
-                                currency, order_type, withdraw_card, screenshot_file_id, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'checking')
+                                currency, order_type, withdraw_card, screenshot_file_id, status, card_used)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'checking', ?)
             """,
             (user_id, chat_id, username, amount, extra_amount, player_id,
-             currency, order_type, withdraw_card, screenshot_file_id)
+             currency, order_type, withdraw_card, screenshot_file_id, card_used)
         )
         await conn.commit()
         return cursor.lastrowid
@@ -166,7 +169,36 @@ async def set_card_number(new_number: str):
         )
         await conn.commit()
 
-# ========== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ==========
+# ========== МЕТОДЫ ДЛЯ ИСТОРИИ ТРАНЗАКЦИЙ ==========
+
+async def get_user_orders_count(user_id: int) -> int:
+    """Получить общее количество транзакций пользователя"""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute(
+            "SELECT COUNT(*) FROM orders WHERE user_id = ?",
+            (user_id,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+async def get_user_orders_paginated(user_id: int, page: int = 1, limit: int = 5) -> list[dict]:
+    """Получить транзакции пользователя с пагинацией"""
+    offset = (page - 1) * limit
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """
+            SELECT * FROM orders 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT ? OFFSET ?
+            """,
+            (user_id, limit, offset)
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+# ========== ОСТАЛЬНЫЕ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 async def get_user_orders(user_id: int, limit: int = 10) -> list[dict]:
     """Получить последние заказы пользователя"""
