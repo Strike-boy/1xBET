@@ -40,7 +40,7 @@ def main_menu_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(text="🔵 📥 Hisobni to'ldirish"),
+                KeyboardButton(text="📥 Hisobni to'ldirish"),
                 KeyboardButton(text="📤 Pul yechish")
             ],
             [
