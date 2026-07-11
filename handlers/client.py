@@ -1,8 +1,9 @@
 """
-Обработчики клиентов: пополнение, вывод, связь с админом.
+Обработчики клиентов: пополнение, вывод, связь с админом, история транзакций.
 """
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import List, Dict, Optional, Tuple
 
 from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, Command
@@ -16,7 +17,16 @@ from aiogram.types import (
 
 import config
 import database as db
-from utils import generate_extra_amount
+from utils import (
+    generate_extra_amount, 
+    format_number, 
+    format_date_uz, 
+    get_last_four_digits,
+    get_status_emoji,
+    get_type_emoji,
+    format_transaction_for_history,
+    group_transactions_by_date
+)
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -52,6 +62,7 @@ def main_menu_kb():
                 KeyboardButton(text="📤 Pul yechish")
             ],
             [
+                KeyboardButton(text="📋 Tranzaksiya tarixi"),
                 KeyboardButton(text="👨🏻‍💻 Admin Aloqa")
             ]
         ],
@@ -117,6 +128,130 @@ def withdraw_confirm_kb():
             [InlineKeyboardButton(text="🚫 Bekor qilish", callback_data="cancel_order")]
         ]
     )
+
+
+# ------------------- История транзакций -------------------
+ITEMS_PER_PAGE = 5
+
+def build_history_text(orders: List[Dict], page: int, total_pages: int) -> Tuple[str, bool]:
+    """Строит текст для страницы истории"""
+    if not orders:
+        return "📋 Tranzaksiya tarixi\n\nSizda hali hech qanday tranzaksiya mavjud emas.", False
+    
+    # Группируем по дате
+    grouped = group_transactions_by_date(orders)
+    
+    # Сортируем даты от новых к старым
+    sorted_dates = sorted(grouped.keys(), reverse=True)
+    
+    lines = [f"📋 Mening tarixim ({page} / {total_pages})"]
+    
+    for date_key in sorted_dates:
+        date_obj = datetime.strptime(date_key, '%Y-%m-%d')
+        date_str = format_date_uz(date_obj)
+        lines.append(f"\n📅 {date_str}")
+        
+        # Сортируем транзакции внутри дня от новых к старым
+        day_orders = sorted(grouped[date_key], key=lambda x: x['created_at'], reverse=True)
+        for order in day_orders:
+            lines.append("")
+            lines.append(format_transaction_for_history(order))
+    
+    return "\n".join(lines), True
+
+def build_pagination_kb(page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """Строит клавиатуру пагинации"""
+    buttons = []
+    
+    if total_pages <= 1:
+        buttons.append([InlineKeyboardButton(text="❌ Yopish", callback_data="history_close")])
+    elif page == 1:
+        buttons.append([
+            InlineKeyboardButton(text="❌ Yopish", callback_data="history_close"),
+            InlineKeyboardButton(text="➡️", callback_data="history_next")
+        ])
+    elif page == total_pages:
+        buttons.append([
+            InlineKeyboardButton(text="⬅️", callback_data="history_prev"),
+            InlineKeyboardButton(text="❌ Yopish", callback_data="history_close")
+        ])
+    else:
+        buttons.append([
+            InlineKeyboardButton(text="⬅️", callback_data="history_prev"),
+            InlineKeyboardButton(text="❌ Yopish", callback_data="history_close"),
+            InlineKeyboardButton(text="➡️", callback_data="history_next")
+        ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@router.message(F.text == "📋 Tranzaksiya tarixi")
+async def show_transaction_history(message: Message, state: FSMContext):
+    """Показывает историю транзакций пользователя"""
+    if message.chat.id == config.ADMIN_CHAT_ID:
+        return
+    
+    user_id = message.from_user.id
+    
+    # Получаем общее количество транзакций
+    total_count = await db.get_user_orders_count(user_id)
+    
+    if total_count == 0:
+        # Нет транзакций
+        text = "📋 Tranzaksiya tarixi\n\nSizda hali hech qanday tranzaksiya mavjud emas."
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Yopish", callback_data="history_close")]
+            ]
+        )
+        await message.answer(text, reply_markup=kb)
+        return
+    
+    total_pages = (total_count + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+    
+    # Получаем первую страницу
+    orders = await db.get_user_orders_paginated(user_id, page=1, limit=ITEMS_PER_PAGE)
+    
+    text, has_content = build_history_text(orders, 1, total_pages)
+    kb = build_pagination_kb(1, total_pages)
+    
+    await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("history_"))
+async def handle_history_navigation(callback: CallbackQuery, state: FSMContext):
+    """Обрабатывает навигацию по истории"""
+    action = callback.data.split("_")[1]
+    
+    # Получаем данные о текущей странице из state
+    data = await state.get_data()
+    current_page = data.get('history_page', 1)
+    
+    if action == "close":
+        await callback.message.delete()
+        await callback.answer()
+        return
+    
+    user_id = callback.from_user.id
+    total_count = await db.get_user_orders_count(user_id)
+    total_pages = (total_count + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+    
+    if action == "next":
+        current_page = min(current_page + 1, total_pages)
+    elif action == "prev":
+        current_page = max(current_page - 1, 1)
+    
+    # Сохраняем текущую страницу
+    await state.update_data(history_page=current_page)
+    
+    # Получаем заказы для страницы
+    orders = await db.get_user_orders_paginated(user_id, page=current_page, limit=ITEMS_PER_PAGE)
+    
+    text, has_content = build_history_text(orders, current_page, total_pages)
+    kb = build_pagination_kb(current_page, total_pages)
+    
+    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
 
 
 # ------------------- Команда /start -------------------
@@ -347,6 +482,7 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
 
     data = await state.get_data()
     username = f"@{message.from_user.username}" if message.from_user.username else message.from_user.full_name
+    card = await db.get_card_number()
 
     order_id = await db.create_order(
         user_id=message.from_user.id,
@@ -357,7 +493,8 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
         player_id=data['player_id'],
         screenshot_file_id=file_id,
         currency=data.get('currency', 'UZS'),
-        order_type='deposit'
+        order_type='deposit',
+        card_used=card  # Сохраняем карту для истории
     )
 
     caption = (
