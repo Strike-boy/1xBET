@@ -1,6 +1,6 @@
 import random
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # Месяцы на узбекском языке
 MONTHS_UZ = {
@@ -145,30 +145,52 @@ def format_card_display(card_number: str, order_type: str) -> str:
         return f"💳 **** {last_four}"
 
 
-def format_transaction_for_history(order: dict) -> str:
+def parse_datetime_with_tz(date_str: str, tz: timezone) -> datetime:
+    """
+    Парсит строку с датой и временем из БД и возвращает datetime с указанным часовым поясом.
+    
+    Аргументы:
+        date_str: строка с датой и временем (ISO формат или '%Y-%m-%d %H:%M:%S')
+        tz: часовой пояс (timezone объект)
+    
+    Возвращает:
+        datetime с указанным часовым поясом
+    """
+    if not date_str:
+        return datetime.now(tz)
+    
+    try:
+        # Пытаемся распарсить ISO формат
+        if 'T' in date_str:
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        else:
+            dt = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+        
+        # Если datetime без часового пояса, добавляем указанный
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz)
+        
+        # Конвертируем в указанный часовой пояс если нужно
+        return dt.astimezone(tz)
+    except (ValueError, TypeError):
+        return datetime.now(tz)
+
+
+def format_transaction_for_history(order: dict, tz: timezone) -> str:
     """
     Форматирует одну транзакцию для отображения в истории.
     
     Аргументы:
         order: словарь с данными транзакции из БД
+        tz: часовой пояс (timezone объект)
     
     Возвращает:
         Отформатированная строка с транзакцией
     """
-    # Извлекаем время
+    # Извлекаем время с учетом часового пояса
     created_at = order.get('created_at', '')
-    if created_at:
-        try:
-            # Пытаемся распарсить ISO формат
-            if 'T' in created_at:
-                dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-            else:
-                dt = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
-            time_str = dt.strftime('%H:%M')
-        except (ValueError, TypeError):
-            time_str = '00:00'
-    else:
-        time_str = '00:00'
+    dt = parse_datetime_with_tz(created_at, tz)
+    time_str = dt.strftime('%H:%M')
     
     # Статус и тип
     status_emoji = get_status_emoji(order.get('status', ''))
@@ -193,12 +215,13 @@ def format_transaction_for_history(order: dict) -> str:
     )
 
 
-def group_transactions_by_date(orders: list) -> dict:
+def group_transactions_by_date(orders: list, tz: timezone) -> dict:
     """
-    Группирует транзакции по датам.
+    Группирует транзакции по датам с учетом часового пояса.
     
     Аргументы:
         orders: список транзакций
+        tz: часовой пояс (timezone объект)
     
     Возвращает:
         Словарь {date_key: [список транзакций]}
@@ -206,17 +229,8 @@ def group_transactions_by_date(orders: list) -> dict:
     grouped = {}
     for order in orders:
         created_at = order.get('created_at', '')
-        if created_at:
-            try:
-                if 'T' in created_at:
-                    dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                else:
-                    dt = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
-                date_key = dt.strftime('%Y-%m-%d')
-            except (ValueError, TypeError):
-                date_key = '1970-01-01'
-        else:
-            date_key = '1970-01-01'
+        dt = parse_datetime_with_tz(created_at, tz)
+        date_key = dt.strftime('%Y-%m-%d')
         
         if date_key not in grouped:
             grouped[date_key] = []
