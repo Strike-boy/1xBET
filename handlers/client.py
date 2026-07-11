@@ -22,6 +22,7 @@ router = Router()
 
 # ------------------- FSM состояния -------------------
 class DepositStates(StatesGroup):
+    broker = State()
     currency = State()        # выбор валюты
     player_id = State()       # ID игрока
     amount = State()          # ввод суммы или выбор кнопки
@@ -29,6 +30,7 @@ class DepositStates(StatesGroup):
     screenshot = State()      # скриншот
 
 class WithdrawStates(StatesGroup):
+    broker = State()
     currency = State()        # выбор валюты
     player_id = State()       # ID игрока
     card_number = State()     # карта для вывода
@@ -48,6 +50,25 @@ def main_menu_kb():
             ]
         ],
         resize_keyboard=True
+    )
+    
+def broker_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="1xBET", callback_data="broker_1xBET"),
+                InlineKeyboardButton(text="LineBet", callback_data="broker_LineBet"),
+                InlineKeyboardButton(text="MelBET", callback_data="broker_MelBET"),
+            ],
+            [
+                InlineKeyboardButton(text="BetWinner", callback_data="broker_BetWinner"),
+                InlineKeyboardButton(text="WinWin", callback_data="broker_WinWin"),
+                InlineKeyboardButton(text="Starz", callback_data="broker_Starz"),
+            ],
+            [
+                InlineKeyboardButton(text="🚫 Bekor qilish", callback_data="cancel_action")
+            ]
+        ]
     )
 
 def currency_kb():
@@ -112,6 +133,8 @@ async def deposit_start(message: Message, state: FSMContext):
     if active:
         await message.answer(f"⏳ Sizda aktiv zakaz bor (№{active['id']}). Kutib to'ring.")
         return
+    await state.set_state(DepositStates.broker)
+    await message.answer("Iltimos brokerni tanlang:", reply_markup=broker_kb())
     await state.set_state(DepositStates.currency)
     await message.answer("🇺🇿So`mli yoki 🇺🇸Dollarli hisobni tanlang:", reply_markup=currency_kb())
 
@@ -121,6 +144,8 @@ async def withdraw_start(message: Message, state: FSMContext):
     if active:
         await message.answer(f"⏳ Sizda aktiv zakaz bor (№{active['id']}). Kutib to'ring.")
         return
+    await state.set_state(WithdrawStates.broker)
+    await message.answer("Iltimos brokerni tanlang:", reply_markup=broker_kb())
     await state.set_state(WithdrawStates.currency)
     await message.answer("🇺🇿So`mli yoki 🇺🇸Dollarli hisobni tanlang:", reply_markup=currency_kb())
 
@@ -138,6 +163,27 @@ async def contact_admin(message: Message):
         reply_markup=kb
     )
 
+@router.callback_query(F.data.startswith("broker_"))
+async def broker_selected(callback: CallbackQuery, state: FSMContext):
+    broker = callback.data.replace("broker_", "")
+
+    await state.update_data(broker=broker)
+
+    current_state = await state.get_state()
+
+    if current_state == DepositStates.broker.state:
+        await state.set_state(DepositStates.currency)
+
+    elif current_state == WithdrawStates.broker.state:
+        await state.set_state(WithdrawStates.currency)
+
+    await callback.message.edit_text(
+        "🇺🇿 So'mli yoki 🇺🇸 Dollarli hisobni tanlang:",
+        reply_markup=currency_kb()
+    )
+
+    await callback.answer()
+    
 # ------------------- Обработчики выбора валюты (инлайн) -------------------
 @router.callback_query(F.data.startswith("currency_"))
 async def currency_selected(callback: CallbackQuery, state: FSMContext):
@@ -226,6 +272,7 @@ async def deposit_amount(message: Message, state: FSMContext):
     # Формируем красивое сообщение как в примере
     await message.answer(
         f"#{message.message_id}\n"
+        f"broker = data.get("broker", "-")"
         f"🆔ID {data.get('currency', 'UZS')} 🇺🇿: {data['player_id']}\n"
         f"💰Komissiya: 0%\n"
         f"💵{data.get('currency', 'UZS')} 🇺🇿 tushadi: {total:,}\n\n"
@@ -371,6 +418,7 @@ async def withdraw_card_number(message: Message, state: FSMContext):
     
     await message.answer(
         f"📋 Pul chiqarish ma'lumotlari:\n"
+        f"broker = data.get("broker", "-")"
         f"ID: {data['player_id']}\n"
         f"Karta: {card}\n"
         f"Valyuta: {data.get('currency', 'UZS')}\n\n"
@@ -423,6 +471,7 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
 
     caption = (
         f"🆕 Zakaz #{order_id} (pul chiqarish)\n"
+        f"broker = data.get("broker", "-")"
         f"ID: {data['player_id']}\n"
         f"Karta: {data['withdraw_card']}\n"
         f"Kimdan: {username} (id: {message.from_user.id})\n"
