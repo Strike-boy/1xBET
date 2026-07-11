@@ -139,7 +139,7 @@ def build_history_text(orders: List[Dict], page: int, total_pages: int) -> Tuple
         return "📋 Tranzaksiya tarixi\n\nSizda hali hech qanday tranzaksiya mavjud emas.", False
     
     # Группируем по дате
-    grouped = group_transactions_by_date(orders)
+    grouped = group_transactions_by_date(orders, UZ_TZ)
     
     # Сортируем даты от новых к старым
     sorted_dates = sorted(grouped.keys(), reverse=True)
