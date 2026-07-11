@@ -279,7 +279,7 @@ async def deposit_amount(message: Message, state: FSMContext):
 
     await message.answer(
         f"#{message.message_id}\n"
-        f"broker = {data.get('broker', '-')}\n"
+        f"📌 Broker: {data.get('broker', '-')}\n"
         f"🆔ID {data.get('currency', 'UZS')} 🇺🇿: {data['player_id']}\n"
         f"💰Komissiya: 0%\n"
         f"💵 {data.get('currency', 'UZS')} 🇺🇿 tushadi: {total:,}\n\n"
@@ -338,7 +338,7 @@ async def deposit_screenshot(message: Message, state: FSMContext, bot: Bot):
 
     caption = (
         f"🆕 Zakaz #{order_id} (to'ldirish)\n"
-        f"broker = {data.get('broker', '-')}\n"
+        f"📌 Broker: {data.get('broker', '-')}\n"
         f"Summa: {data.get('total', data['amount']):,} {data.get('currency', 'UZS')}\n"
         f"ID: {data['player_id']}\n"
         f"Kimdan: {username} (id: {message.from_user.id})\n"
@@ -397,7 +397,7 @@ async def withdraw_card_number(message: Message, state: FSMContext):
 
     await message.answer(
         f"📋 Pul chiqarish ma'lumotlari:\n"
-        f"broker = {data.get('broker', '-')}\n"
+        f"📌 Broker: {data.get('broker', '-')}\n"
         f"ID: {data['player_id']}\n"
         f"Karta: {card}\n"
         f"Valyuta: {data.get('currency', 'UZS')}\n\n"
@@ -453,7 +453,7 @@ async def withdraw_screenshot(message: Message, state: FSMContext, bot: Bot):
 
     caption = (
         f"🆕 Zakaz #{order_id} (pul chiqarish)\n"
-        f"broker = {data.get('broker', '-')}\n"
+        f"📌 Broker: {data.get('broker', '-')}\n"
         f"ID: {data['player_id']}\n"
         f"Karta: {data['withdraw_card']}\n"
         f"Kimdan: {username} (id: {message.from_user.id})\n"
