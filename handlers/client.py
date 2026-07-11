@@ -13,7 +13,6 @@ from aiogram.types import (
     ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton,
     FSInputFile
 )
-from aiogram.enums import ButtonColor
 import config
 import database as db
 from utils import generate_extra_amount
@@ -41,10 +40,7 @@ def main_menu_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(
-                    text="📥 Hisobni to'ldirish",
-                    color=ButtonColor.Primary
-                ),
+                KeyboardButton(text="📥 Hisobni to'ldirish"),
                 KeyboardButton(text="📤 Pul yechish")
             ],
             [
