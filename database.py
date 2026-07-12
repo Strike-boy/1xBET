@@ -135,6 +135,7 @@ async def get_checking_orders_older_than(minutes: int) -> list[dict]:
 async def get_stats() -> dict:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
+        
         async def count(where: str = "", params: tuple = ()) -> int:
             query = "SELECT COUNT(*) as c FROM orders"
             if where:
@@ -142,8 +143,27 @@ async def get_stats() -> dict:
             cursor = await conn.execute(query, params)
             row = await cursor.fetchone()
             return row["c"]
+        
+        async def sum_amount(where: str = "", params: tuple = ()) -> int:
+            query = "SELECT COALESCE(SUM(amount + extra_amount), 0) as total FROM orders"
+            if where:
+                query += f" WHERE {where}"
+            cursor = await conn.execute(query, params)
+            row = await cursor.fetchone()
+            return row["total"] if row else 0
+        
+        async def unique_users_count(where: str = "", params: tuple = ()) -> int:
+            query = "SELECT COUNT(DISTINCT user_id) as count FROM orders"
+            if where:
+                query += f" WHERE {where}"
+            cursor = await conn.execute(query, params)
+            row = await cursor.fetchone()
+            return row["count"] if row else 0
+        
         today = datetime.now(UZ_TZ).date().isoformat()
-        return {
+        
+        # Существующая статистика
+        result = {
             "total": await count(),
             "done": await count("status = ?", ("done",)),
             "cancelled": await count("status = ?", ("cancelled",)),
@@ -152,6 +172,35 @@ async def get_stats() -> dict:
             "withdraw_done": await count("status = ? AND order_type = ?", ("done", "withdraw")),
             "withdraw_checking": await count("status = ? AND order_type = ?", ("checking", "withdraw")),
         }
+        
+        # Новая статистика: суммы по типам за сегодня
+        result["today_deposit_sum"] = await sum_amount(
+            "DATE(created_at) = ? AND status = ? AND order_type = ?",
+            (today, "done", "deposit")
+        )
+        result["today_withdraw_sum"] = await sum_amount(
+            "DATE(created_at) = ? AND status = ? AND order_type = ?",
+            (today, "done", "withdraw")
+        )
+        
+        # Новая статистика: общие суммы по типам
+        result["total_deposit_sum"] = await sum_amount(
+            "status = ? AND order_type = ?",
+            ("done", "deposit")
+        )
+        result["total_withdraw_sum"] = await sum_amount(
+            "status = ? AND order_type = ?",
+            ("done", "withdraw")
+        )
+        
+        # Новая статистика: уникальные пользователи
+        result["new_users_today"] = await unique_users_count(
+            "DATE(created_at) = ?",
+            (today,)
+        )
+        result["total_users"] = await unique_users_count()
+        
+        return result
 
 async def get_card_number() -> str:
     async with aiosqlite.connect(DB_PATH) as conn:
