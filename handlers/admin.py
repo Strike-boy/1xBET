@@ -11,6 +11,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 import config
 import database as db
+from utils import format_number
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -224,7 +225,9 @@ async def cmd_stats(message: Message):
         return
     
     stats = await db.get_stats()
-    await message.answer(
+    
+    # Существующая статистика
+    result_text = (
         "📊 Zakazlar statistikasi:\n"
         f"Bugun: {stats['today']}\n"
         f"Jami: {stats['total']}\n"
@@ -232,5 +235,28 @@ async def cmd_stats(message: Message):
         f"❌ Rad etildi: {stats['cancelled']}\n"
         f"⏳ Tekshiruvda: {stats['checking']}\n"
         f"💰 Bajarilgan chiqimlar: {stats.get('withdraw_done', 0)}\n"
-        f"⏳ Tekshiruvdagi chiqimlar: {stats.get('withdraw_checking', 0)}"
+        f"⏳ Tekshiruvdagi chiqimlar: {stats.get('withdraw_checking', 0)}\n\n"
     )
+    
+    # Новый блок: сегодняшние суммы
+    result_text += (
+        "📅 Bugun\n"
+        f"💰 To'ldirishlar: {format_number(stats.get('today_deposit_sum', 0))} so'm\n"
+        f"💸 Yechib olishlar: {format_number(stats.get('today_withdraw_sum', 0))} so'm\n\n"
+    )
+    
+    # Новый блок: общие суммы
+    result_text += (
+        "📆 Umumiy\n"
+        f"💰 To'ldirishlar: {format_number(stats.get('total_deposit_sum', 0))} so'm\n"
+        f"💸 Yechib olishlar: {format_number(stats.get('total_withdraw_sum', 0))} so'm\n\n"
+    )
+    
+    # Новый блок: пользователи
+    result_text += (
+        "👥 Foydalanuvchilar\n"
+        f"🆕 Bugun: {stats.get('new_users_today', 0)}\n"
+        f"👤 Jami: {stats.get('total_users', 0)}"
+    )
+    
+    await message.answer(result_text)
