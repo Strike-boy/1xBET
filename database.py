@@ -178,20 +178,14 @@ async def get_stats() -> dict:
             "DATE(created_at) = ? AND status = ? AND order_type = ?",
             (today, "done", "deposit")
         )
-        result["today_withdraw_sum"] = await sum_amount(
-            "DATE(created_at) = ? AND status = ? AND order_type = ?",
-            (today, "done", "withdraw")
-        )
+        result["today_withdraw_sum"] = 0
         
         # Новая статистика: общие суммы по типам
         result["total_deposit_sum"] = await sum_amount(
             "status = ? AND order_type = ?",
             ("done", "deposit")
         )
-        result["total_withdraw_sum"] = await sum_amount(
-            "status = ? AND order_type = ?",
-            ("done", "withdraw")
-        )
+        result["total_withdraw_sum"] = 0
         
         # Новая статистика: уникальные пользователи
         result["new_users_today"] = await unique_users_count(
