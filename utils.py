@@ -174,8 +174,8 @@ def parse_datetime_with_tz(date_str: str, tz: timezone) -> datetime:
             return dt.astimezone(tz)
         
         # Если datetime без часового пояса, добавляем указанный
-        dt = dt.replace(tzinfo=tz)
-        return dt
+        dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(tz)
         
     except (ValueError, TypeError):
         return datetime.now(tz)
