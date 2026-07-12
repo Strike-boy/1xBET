@@ -238,18 +238,16 @@ async def cmd_stats(message: Message):
         f"⏳ Tekshiruvdagi chiqimlar: {stats.get('withdraw_checking', 0)}\n\n"
     )
     
-    # Новый блок: сегодняшние суммы
+    # Новый блок: только пополнения
     result_text += (
         "📅 Bugun\n"
-        f"💰 To'ldirishlar: {format_number(stats.get('today_deposit_sum', 0))} so'm\n"
-        f"💸 Yechib olishlar: {format_number(stats.get('today_withdraw_sum', 0))} so'm\n\n"
+        f"💰 To'ldirishlar: {format_number(stats.get('today_deposit_sum', 0))} so'm\n\n"
     )
     
-    # Новый блок: общие суммы
+    # Новый блок: общие суммы (только пополнения)
     result_text += (
         "📆 Umumiy\n"
-        f"💰 To'ldirishlar: {format_number(stats.get('total_deposit_sum', 0))} so'm\n"
-        f"💸 Yechib olishlar: {format_number(stats.get('total_withdraw_sum', 0))} so'm\n\n"
+        f"💰 To'ldirishlar: {format_number(stats.get('total_deposit_sum', 0))} so'm\n\n"
     )
     
     # Новый блок: пользователи
