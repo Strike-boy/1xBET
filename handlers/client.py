@@ -62,8 +62,8 @@ def main_menu_kb():
                 KeyboardButton(text="📤 Pul yechish")
             ],
             [
-                KeyboardButton(text="📋 Tranzaksiya tarixi"),
-                KeyboardButton(text="👨🏻‍💻 Admin Aloqa")
+                KeyboardButton(text="👨🏻‍💻 Admin Aloqa"),
+                KeyboardButton(text="📋 Tranzaksiya tarixi")
             ]
         ],
         resize_keyboard=True
