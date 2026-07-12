@@ -145,9 +145,7 @@ async def get_stats() -> dict:
             return row["c"]
         
         async def sum_amount(where: str = "", params: tuple = ()) -> int:
-            # Суммируем amount + extra_amount для всех типов операций
-            # Если extra_amount = NULL, считаем как 0
-            query = "SELECT COALESCE(SUM(amount + COALESCE(extra_amount, 0)), 0) as total FROM orders"
+            query = "SELECT COALESCE(SUM(amount + extra_amount), 0) as total FROM orders"
             if where:
                 query += f" WHERE {where}"
             cursor = await conn.execute(query, params)
