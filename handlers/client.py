@@ -261,7 +261,50 @@ async def cmd_start(message: Message, state: FSMContext):
         return
     
     await state.clear()
-    await message.answer(
+    
+    # Проверяем, есть ли канал в конфиге
+    if config.CHANNEL_ID != 0 and config.CHANNEL_URL:
+        # Создаем клавиатуру с кнопкой перехода в канал
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(
+                    text=f"📢 {config.CHANNEL_NAME}ga obuna bo'ling",
+                    url=config.CHANNEL_URL
+                )],
+                [InlineKeyboardButton(
+                    text="✅ Davom etish",
+                    callback_data="continue_after_subscribe"
+                )]
+            ]
+        )
+        
+        await message.answer(
+            f"Assalomu alaykum! 🖐️\n"
+            f"Onlayn kassamizga xush kelibsiz!\n\n"
+            f"💳 Toʻldirishlar — 0% komissiya\n"
+            f"⚡️ Jarayon juda sodda va tez\n"
+            f"📱 Bir necha soniya ichida hisobingiz toʻldiriladi\n\n"
+            f"📢 Iltimos, avval {config.CHANNEL_NAME}ga obuna bo'ling!",
+            reply_markup=kb,
+            disable_web_page_preview=True
+        )
+    else:
+        await message.answer(
+            "Assalomu alaykum! 🖐️\n"
+            "Onlayn kassamizga xush kelibsiz!\n"
+            "\n"
+            "💳 Toʻldirishlar — 0% komissiya\n"
+            "⚡️ Jarayon juda sodda va tez\n"
+            "📱 Bir necha soniya ichida hisobingiz toʻldiriladi\n",
+            reply_markup=main_menu_kb()
+        )
+
+
+@router.callback_query(F.data == "continue_after_subscribe")
+async def continue_after_subscribe(callback: CallbackQuery, state: FSMContext):
+    """Продолжает после нажатия кнопки 'Davom etish'"""
+    await callback.message.delete()
+    await callback.message.answer(
         "Assalomu alaykum! 🖐️\n"
         "Onlayn kassamizga xush kelibsiz!\n"
         "\n"
@@ -270,6 +313,7 @@ async def cmd_start(message: Message, state: FSMContext):
         "📱 Bir necha soniya ichida hisobingiz toʻldiriladi\n",
         reply_markup=main_menu_kb()
     )
+    await callback.answer()
 
 
 @router.message(Command("cancel"))
