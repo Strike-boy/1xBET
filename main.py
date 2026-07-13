@@ -11,8 +11,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ErrorEvent
 import config
 import database as db
-from handlers import client, admin
-from middlewares import ThrottlingMiddleware
+from handlers import client, admin, subscription
+from middlewares import ThrottlingMiddleware, ForceSubscribeMiddleware
 from scheduler import remind_admins
 
 logging.basicConfig(
@@ -53,9 +53,12 @@ async def main():
 
     # Подключаем middleware антифлуда
     dp.update.middleware(ThrottlingMiddleware(rate_limit=1.0))
+    # Подключаем middleware принудительной подписки
+    dp.update.middleware(ForceSubscribeMiddleware())
 
     dp.include_router(admin.router)
     dp.include_router(client.router)
+    dp.include_router(subscription.router)
 
     @dp.errors()
     async def errors_handler(event: ErrorEvent):
