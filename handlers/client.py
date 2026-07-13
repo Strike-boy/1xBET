@@ -279,11 +279,6 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         
         await message.answer(
-            f"Assalomu alaykum! 🖐️\n"
-            f"Onlayn kassamizga xush kelibsiz!\n\n"
-            f"💳 Toʻldirishlar — 0% komissiya\n"
-            f"⚡️ Jarayon juda sodda va tez\n"
-            f"📱 Bir necha soniya ichida hisobingiz toʻldiriladi\n\n"
             f"📢 Iltimos, avval {config.CHANNEL_NAME}ga obuna bo'ling!",
             reply_markup=kb,
             disable_web_page_preview=True
