@@ -391,14 +391,14 @@ async def handle_restore_file(message: Message, bot: Bot):
         # Сохраняем путь к файлу в состоянии
         restore_states[admin_id]['backup_path'] = file_path
         
+        # Исправленное сообщение без Markdown
         await status_msg.edit_text(
             f"✅ Файл проверен и готов к восстановлению\n\n"
             f"📁 Имя: {document.file_name}\n"
             f"📊 Размер: {document.file_size / (1024 * 1024):.2f} MB\n\n"
-            f"⚠️ **Подтвердите восстановление!**\n"
+            f"⚠️ ПОДТВЕРДИТЕ ВОССТАНОВЛЕНИЕ!\n"
             f"Текущая база данных будет заменена.",
-            reply_markup=keyboard,
-            parse_mode="Markdown"
+            reply_markup=keyboard
         )
         
     except Exception as e:
