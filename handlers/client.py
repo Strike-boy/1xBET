@@ -79,9 +79,9 @@ def broker_kb():
                 InlineKeyboardButton(text="MelBET", callback_data="broker_MelBET"),
             ],
             [
-                InlineKeyboardButton(text="BetWinner", callback_data="broker_BetWinner"),
-                InlineKeyboardButton(text="WinWin", callback_data="broker_WinWin"),
-                InlineKeyboardButton(text="Starz", callback_data="broker_Starz"),
+                InlineKeyboardButton(text="XPariBet", callback_data="broker_XPariBet"),
+                InlineKeyboardButton(text="1Win", callback_data="broker_1Win"),
+                InlineKeyboardButton(text="Starz888", callback_data="broker_Starz888"),
             ],
             [
                 InlineKeyboardButton(text="🚫 Bekor qilish", callback_data="cancel_action")
