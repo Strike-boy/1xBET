@@ -14,6 +14,7 @@ import database as db
 from handlers import client, admin
 from middlewares import ThrottlingMiddleware
 from scheduler import remind_admins
+from backup_manager import auto_backup_task
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,11 +43,12 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
 
+    # Обновленный список команд с новыми командами бэкапа
     await bot.set_my_commands([
-        BotCommand(
-            command="start",
-            description="🏠 Bosh menyu"
-        )
+        BotCommand(command="start", description="🏠 Bosh menyu"),
+        BotCommand(command="backup", description="📦 Создать резервную копию"),
+        BotCommand(command="restore", description="🔄 Восстановить базу данных"),
+        BotCommand(command="backups", description="📋 Список резервных копий"),
     ])
 
     dp = Dispatcher(storage=MemoryStorage())
@@ -64,6 +66,9 @@ async def main():
 
     # Запускаем напоминания админам
     asyncio.create_task(remind_admins(bot))
+    
+    # Запускаем задачу автоматического бэкапа (каждые 7 дней)
+    asyncio.create_task(auto_backup_task(bot))
 
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Бот запущен")
