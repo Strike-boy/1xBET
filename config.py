@@ -14,6 +14,14 @@ DEFAULT_CARD_NUMBER = os.getenv("CARD_NUMBER", "Номер карты не за�
 ADMIN_CONTACTS = os.getenv("ADMIN_CONTACTS", "@admin")
 WITHDRAW_VIDEO_FILE_ID = os.getenv("WITHDRAW_VIDEO_FILE_ID", "")
 
+# Force Subscribe конфигурация
+REQUIRED_CHANNELS = [
+    {
+        "id": int(os.getenv("REQUIRED_CHANNEL_ID", "0")),
+        "url": os.getenv("REQUIRED_CHANNEL_URL", "https://t.me/your_channel")
+    }
+]
+
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN не задан.")
 if not ADMIN_IDS:
