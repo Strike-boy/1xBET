@@ -80,7 +80,6 @@ class BackupManager:
         """Закрывает все активные соединения с SQLite"""
         try:
             # Принудительное закрытие всех соединений через aiosqlite
-            # (это не идеальное решение, но работает для большинства случаев)
             for conn in aiosqlite._connections:
                 try:
                     await conn.close()
@@ -143,7 +142,7 @@ class BackupManager:
                 if os.path.exists(TEMP_BACKUP):
                     shutil.copy2(TEMP_BACKUP, config.DB_PATH)
                     logger.info("Восстановлена временная копия из-за ошибки проверки")
-                return False, "❌ Восстановленная база данных повреждена, выполнена откат"
+                return False, "❌ Восстановленная база данных повреждена, выполнен откат"
             
             # Удаляем временную копию после успешного восстановления
             if os.path.exists(TEMP_BACKUP):
@@ -164,7 +163,7 @@ class BackupManager:
                 try:
                     shutil.copy2(TEMP_BACKUP, config.DB_PATH)
                     logger.info("Восстановлена временная копия после ошибки")
-                    return False, f"❌ Ошибка восстановления, выполнена откат: {str(e)}"
+                    return False, f"❌ Ошибка восстановления, выполнен откат: {str(e)}"
                 except:
                     pass
             
