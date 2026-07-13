@@ -22,6 +22,9 @@ router = Router()
 # Временное хранилище для комментариев
 pending_comments = {}  # {admin_id: order_id}
 
+# Временное хранилище для процесса восстановления
+restore_states = {}  # {admin_id: {'step': 'waiting_for_file', 'backup_path': None}}
+
 def is_admin(user_id: int) -> bool:
     return user_id in config.ADMIN_IDS
 
@@ -302,75 +305,105 @@ async def cmd_backup(message: Message, bot: Bot):
 
 @router.message(Command("restore"))
 async def cmd_restore_start(message: Message):
-    """Начинает процесс восстановления базы данных"""
+    """Начинает процесс восстановления базы данных - запрашивает файл у администратора"""
     if not is_admin(message.from_user.id):
         return
     
-    # Показываем список доступных бэкапов
-    backups = await BackupManager.list_backups()
+    # Сохраняем состояние ожидания файла
+    restore_states[message.from_user.id] = {'step': 'waiting_for_file'}
     
-    if not backups:
-        await message.answer("❌ Нет доступных резервных копий для восстановления.")
-        return
-    
-    # Создаем клавиатуру с бэкапами
-    keyboard = []
-    for i, backup in enumerate(backups[:10]):  # Показываем последние 10
-        status = "✅" if backup['is_valid'] else "❌"
-        keyboard.append([InlineKeyboardButton(
-            text=f"{status} {backup['name']} ({backup['size_mb']:.1f}MB, {backup['modified_str']})",
-            callback_data=f"restore_select:{backup['name']}"
-        )])
-    
-    # Кнопка отмены
-    keyboard.append([InlineKeyboardButton(
-        text="❌ Отмена",
-        callback_data="restore_cancel"
-    )])
-    
-    markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-    await message.answer(
-        "🔧 **Восстановление базы данных**\n\n"
-        "Выберите резервную копию для восстановления:\n"
-        "✅ - корректная БД\n"
-        "❌ - поврежденная БД\n\n"
-        "⚠️ **Внимание!** Текущая база данных будет заменена.",
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
-
-@router.callback_query(F.data.startswith("restore_select:"))
-async def cmd_restore_select(callback: CallbackQuery, bot: Bot):
-    """Обработка выбора бэкапа для восстановления"""
-    if not is_admin(callback.from_user.id):
-        await callback.answer()
-        return
-    
-    backup_name = callback.data.split(":", 1)[1]
-    backup_path = os.path.join(BACKUP_DIR, backup_name)
-    
-    if not os.path.exists(backup_path):
-        await callback.answer("❌ Файл не найден", show_alert=True)
-        return
-    
-    # Запрашиваем подтверждение
+    # Клавиатура для отмены
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"restore_confirm:{backup_name}"),
-            InlineKeyboardButton(text="❌ Отмена", callback_data="restore_cancel")
-        ]
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="restore_cancel")]
     ])
     
-    await callback.message.edit_text(
-        f"⚠️ **Подтверждение восстановления**\n\n"
-        f"Файл: `{backup_name}`\n\n"
-        f"⚠️ Текущая база данных будет **ЗАМЕНЕНА**.\n"
-        f"Временная копия текущей базы будет создана для отката.\n\n"
-        f"Подтверждаете восстановление?",
+    await message.answer(
+        "🔄 **Восстановление базы данных**\n\n"
+        "Отправьте мне файл резервной копии в формате `.db`\n\n"
+        "⚠️ **ВНИМАНИЕ!**\n"
+        "• Текущая база данных будет ЗАМЕНЕНА\n"
+        "• Перед заменой будет создана временная копия\n"
+        "• В случае ошибки будет выполнен откат\n\n"
+        "📤 Просто отправьте файл .db в этот чат",
         reply_markup=keyboard,
         parse_mode="Markdown"
     )
-    await callback.answer()
+
+@router.message(F.document)
+async def handle_restore_file(message: Message, bot: Bot):
+    """Обработка полученного файла для восстановления"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    admin_id = message.from_user.id
+    
+    # Проверяем, находится ли админ в процессе восстановления
+    if admin_id not in restore_states or restore_states[admin_id].get('step') != 'waiting_for_file':
+        return
+    
+    document = message.document
+    
+    # Проверяем, что файл имеет расширение .db
+    if not document.file_name or not document.file_name.endswith('.db'):
+        await message.answer(
+            "❌ Неверный формат файла!\n"
+            "Пожалуйста, отправьте файл с расширением `.db`"
+        )
+        return
+    
+    # Проверяем размер файла (максимум 50MB)
+    if document.file_size > 50 * 1024 * 1024:
+        await message.answer(
+            "❌ Файл слишком большой! Максимальный размер: 50MB"
+        )
+        return
+    
+    # Отправляем статус
+    status_msg = await message.answer("⏳ Скачиваю файл и проверяю...")
+    
+    try:
+        # Скачиваем файл
+        file = await bot.get_file(document.file_id)
+        file_path = f"restore_{admin_id}_{datetime.now(UZ_TZ).strftime('%Y%m%d_%H%M%S')}.db"
+        await bot.download_file(file.file_path, file_path)
+        
+        # Проверяем, что это корректная SQLite база
+        await status_msg.edit_text("⏳ Проверяю целостность базы данных...")
+        
+        is_valid = await BackupManager._verify_database(file_path)
+        
+        if not is_valid:
+            os.remove(file_path)
+            await status_msg.edit_text(
+                "❌ Файл не является корректной SQLite-базой данных!\n"
+                "Пожалуйста, отправьте правильный файл резервной копии."
+            )
+            return
+        
+        # Запрашиваем подтверждение
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"restore_confirm:{file_path}"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="restore_cancel")
+            ]
+        ])
+        
+        # Сохраняем путь к файлу в состоянии
+        restore_states[admin_id]['backup_path'] = file_path
+        
+        await status_msg.edit_text(
+            f"✅ Файл проверен и готов к восстановлению\n\n"
+            f"📁 Имя: {document.file_name}\n"
+            f"📊 Размер: {document.file_size / (1024 * 1024):.2f} MB\n\n"
+            f"⚠️ **Подтвердите восстановление!**\n"
+            f"Текущая база данных будет заменена.",
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        logger.exception(f"Ошибка при обработке файла: {e}")
+        await status_msg.edit_text(f"❌ Ошибка при обработке файла: {str(e)}")
 
 @router.callback_query(F.data.startswith("restore_confirm:"))
 async def cmd_restore_confirm(callback: CallbackQuery, bot: Bot):
@@ -379,9 +412,17 @@ async def cmd_restore_confirm(callback: CallbackQuery, bot: Bot):
         await callback.answer()
         return
     
-    # Извлекаем имя файла из данных
-    backup_name = callback.data.split(":", 1)[1]
-    backup_path = os.path.join(BACKUP_DIR, backup_name)
+    admin_id = callback.from_user.id
+    
+    # Получаем путь к файлу из состояния
+    if admin_id not in restore_states:
+        await callback.answer("❌ Сессия восстановления не найдена", show_alert=True)
+        return
+    
+    backup_path = restore_states[admin_id].get('backup_path')
+    if not backup_path or not os.path.exists(backup_path):
+        await callback.answer("❌ Файл не найден", show_alert=True)
+        return
     
     # Отправляем статус
     await callback.message.edit_text("⏳ Восстанавливаю базу данных...")
@@ -390,11 +431,19 @@ async def cmd_restore_confirm(callback: CallbackQuery, bot: Bot):
         # Выполняем восстановление
         success, message = await BackupManager.restore_from_backup(backup_path)
         
+        # Удаляем временный файл
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+        
+        # Очищаем состояние
+        if admin_id in restore_states:
+            del restore_states[admin_id]
+        
         if success:
             await callback.message.edit_text(
                 f"{message}\n\n"
                 f"📅 {datetime.now(UZ_TZ).strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"📁 Восстановлен файл: {backup_name}"
+                f"✅ База данных успешно восстановлена!"
             )
         else:
             await callback.message.edit_text(f"{message}")
@@ -412,22 +461,35 @@ async def cmd_restore_cancel(callback: CallbackQuery):
         await callback.answer()
         return
     
+    admin_id = callback.from_user.id
+    
+    # Удаляем временный файл, если он существует
+    if admin_id in restore_states:
+        backup_path = restore_states[admin_id].get('backup_path')
+        if backup_path and os.path.exists(backup_path):
+            os.remove(backup_path)
+        del restore_states[admin_id]
+    
     await callback.message.edit_text("❌ Восстановление отменено.")
     await callback.answer()
 
 @router.message(Command("backups"))
 async def cmd_list_backups(message: Message):
-    """Показывает список доступных резервных копий"""
+    """Показывает список доступных резервных копий (локальных)"""
     if not is_admin(message.from_user.id):
         return
     
     backups = await BackupManager.list_backups()
     
     if not backups:
-        await message.answer("📭 Нет доступных резервных копий.")
+        await message.answer(
+            "📭 Нет доступных локальных резервных копий.\n\n"
+            "💡 Совет: Используйте команду /backup для создания новой копии\n"
+            "или /restore для загрузки файла с вашего компьютера."
+        )
         return
     
-    text = "📦 **Доступные резервные копии:**\n\n"
+    text = "📦 **Доступные локальные резервные копии:**\n\n"
     for i, backup in enumerate(backups[:20], 1):  # Показываем последние 20
         status = "✅" if backup['is_valid'] else "❌"
         text += f"{i}. {status} `{backup['name']}`\n"
@@ -437,6 +499,7 @@ async def cmd_list_backups(message: Message):
             text += "   ⚠️ **Повреждена!**\n"
         text += "\n"
     
-    text += f"📁 Всего: {len(backups)} файлов"
+    text += f"📁 Всего: {len(backups)} файлов\n\n"
+    text += "💡 Для восстановления из локального бэкапа используйте /restore и загрузите файл"
     
     await message.answer(text, parse_mode="Markdown")
