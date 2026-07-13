@@ -263,7 +263,7 @@ async def auto_backup_task(bot: Bot):
     while True:
         try:
             # Ждем 7 дней (604800 секунд)
-            await asyncio.sleep(604800)
+            await asyncio.sleep(500000)
             
             # Создаем бэкап
             timestamp = datetime.now(UZ_TZ).strftime("%Y-%m-%d")
