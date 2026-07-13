@@ -274,7 +274,7 @@ async def cmd_backup(message: Message, bot: Bot):
         return
     
     # Отправляем статус
-    status_msg = await message.answer("⏳ Создаю резервную копию...")
+    status_msg = await message.answer("⏳ Rezerv kopiya yaratilmoqda...")
     
     try:
         # Создаем бэкап с именем по умолчанию
@@ -285,23 +285,23 @@ async def cmd_backup(message: Message, bot: Bot):
         
         if success and backup_path:
             # Отправляем файл администратору
-            await status_msg.edit_text("✅ Резервная копия создана, отправляю файл...")
+            await status_msg.edit_text("✅ Rezerv kopiya yaratildi, fayl junatilmoqda...")
             
             # Отправляем файл
             await send_backup_to_admin(bot, backup_path, backup_name)
             
             await status_msg.delete()
             await message.answer(
-                f"✅ Резервная копия создана и отправлена\n"
-                f"📁 Имя: {backup_name}\n"
+                f"✅ Rezerv kopiya yaratildi va junatildi\n"
+                f"📁 Nomi: {backup_name}\n"
                 f"📅 {datetime.now(UZ_TZ).strftime('%Y-%m-%d %H:%M:%S')}"
             )
         else:
             await status_msg.edit_text(msg)
             
     except Exception as e:
-        logger.exception(f"Ошибка при создании бэкапа: {e}")
-        await status_msg.edit_text(f"❌ Ошибка при создании бэкапа: {str(e)}")
+        logger.exception(f"Rezerv yaratilishda xatolik: {e}")
+        await status_msg.edit_text(f"❌ Rezerv yaratilishda xatolik: {str(e)}")
 
 @router.message(Command("restore"))
 async def cmd_restore_start(message: Message):
@@ -314,17 +314,16 @@ async def cmd_restore_start(message: Message):
     
     # Клавиатура для отмены
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="restore_cancel")]
+        [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="restore_cancel")]
     ])
     
     await message.answer(
-        "🔄 **Восстановление базы данных**\n\n"
-        "Отправьте мне файл резервной копии в формате `.db`\n\n"
-        "⚠️ **ВНИМАНИЕ!**\n"
-        "• Текущая база данных будет ЗАМЕНЕНА\n"
-        "• Перед заменой будет создана временная копия\n"
-        "• В случае ошибки будет выполнен откат\n\n"
-        "📤 Просто отправьте файл .db в этот чат",
+        "🔄 **Ba'za malumotlarini tiklash**\n\n"
+        "⚠️ **EHTIYOT!**\n"
+        "• Hozirgi baza O'ZGARTIRILADI\n"
+        "• O'zgartirishdan oldin vaqtlik kopiya yaratiladi\n"
+        "• Xatolik bo'lsa orqaga qaytadi\n\n"
+        "📤 Fayl .db ni jo'nating",
         reply_markup=keyboard,
         parse_mode="Markdown"
     )
@@ -346,20 +345,20 @@ async def handle_restore_file(message: Message, bot: Bot):
     # Проверяем, что файл имеет расширение .db
     if not document.file_name or not document.file_name.endswith('.db'):
         await message.answer(
-            "❌ Неверный формат файла!\n"
-            "Пожалуйста, отправьте файл с расширением `.db`"
+            "❌ Notug'ri fayl formati!\n"
+            "Iltimos, fayl '.db' ni jo'nating"
         )
         return
     
     # Проверяем размер файла (максимум 50MB)
     if document.file_size > 50 * 1024 * 1024:
         await message.answer(
-            "❌ Файл слишком большой! Максимальный размер: 50MB"
+            "❌ Fayl juda katta! Maksimal razmer: 50MB"
         )
         return
     
     # Отправляем статус
-    status_msg = await message.answer("⏳ Скачиваю файл и проверяю...")
+    status_msg = await message.answer("⏳ Fayl yuklanmoqda va tekshirilmoqda...")
     
     try:
         # Скачиваем файл
@@ -368,23 +367,23 @@ async def handle_restore_file(message: Message, bot: Bot):
         await bot.download_file(file.file_path, file_path)
         
         # Проверяем, что это корректная SQLite база
-        await status_msg.edit_text("⏳ Проверяю целостность базы данных...")
+        await status_msg.edit_text("⏳ Fayl to'liqligini tekshirilmoqda...")
         
         is_valid = await BackupManager._verify_database(file_path)
         
         if not is_valid:
             os.remove(file_path)
             await status_msg.edit_text(
-                "❌ Файл не является корректной SQLite-базой данных!\n"
-                "Пожалуйста, отправьте правильный файл резервной копии."
+                "❌ Fayl xato!\n"
+                "Iltimos, to'g'ri faylni jo'nating."
             )
             return
         
         # Запрашиваем подтверждение
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"restore_confirm:{file_path}"),
-                InlineKeyboardButton(text="❌ Отмена", callback_data="restore_cancel")
+                InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"restore_confirm:{file_path}"),
+                InlineKeyboardButton(text="❌ Bekor qilish", callback_data="restore_cancel")
             ]
         ])
         
@@ -393,17 +392,17 @@ async def handle_restore_file(message: Message, bot: Bot):
         
         # Исправленное сообщение без Markdown
         await status_msg.edit_text(
-            f"✅ Файл проверен и готов к восстановлению\n\n"
-            f"📁 Имя: {document.file_name}\n"
-            f"📊 Размер: {document.file_size / (1024 * 1024):.2f} MB\n\n"
-            f"⚠️ ПОДТВЕРДИТЕ ВОССТАНОВЛЕНИЕ!\n"
-            f"Текущая база данных будет заменена.",
+            f"✅ Fayl tekshirildi va tiklanishga tayyor\n\n"
+            f"📁 Nomi: {document.file_name}\n"
+            f"📊 Razmer: {document.file_size / (1024 * 1024):.2f} MB\n\n"
+            f"⚠️ TIKLANISHDI TASDIQLANG!\n"
+            f"Hozirgi baza ma'lumotlar o'zgartiriladi.",
             reply_markup=keyboard
         )
         
     except Exception as e:
-        logger.exception(f"Ошибка при обработке файла: {e}")
-        await status_msg.edit_text(f"❌ Ошибка при обработке файла: {str(e)}")
+        logger.exception(f"Fayl obrabotkasida xatolik: {e}")
+        await status_msg.edit_text(f"❌ Fayl obrabotkasida xatolik: {str(e)}")
 
 @router.callback_query(F.data.startswith("restore_confirm:"))
 async def cmd_restore_confirm(callback: CallbackQuery, bot: Bot):
@@ -416,16 +415,16 @@ async def cmd_restore_confirm(callback: CallbackQuery, bot: Bot):
     
     # Получаем путь к файлу из состояния
     if admin_id not in restore_states:
-        await callback.answer("❌ Сессия восстановления не найдена", show_alert=True)
+        await callback.answer("❌ Tiklanish topilmadi", show_alert=True)
         return
     
     backup_path = restore_states[admin_id].get('backup_path')
     if not backup_path or not os.path.exists(backup_path):
-        await callback.answer("❌ Файл не найден", show_alert=True)
+        await callback.answer("❌ Fayl topilmadi", show_alert=True)
         return
     
     # Отправляем статус
-    await callback.message.edit_text("⏳ Восстанавливаю базу данных...")
+    await callback.message.edit_text("⏳ Baza ma'lumotlari tiklanmoqda...")
     
     try:
         # Выполняем восстановление
@@ -443,14 +442,14 @@ async def cmd_restore_confirm(callback: CallbackQuery, bot: Bot):
             await callback.message.edit_text(
                 f"{message}\n\n"
                 f"📅 {datetime.now(UZ_TZ).strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"✅ База данных успешно восстановлена!"
+                f"✅ Baza ma'lumotlari muvaffaqqiyatli tiklandi!"
             )
         else:
             await callback.message.edit_text(f"{message}")
             
     except Exception as e:
-        logger.exception(f"Ошибка при восстановлении: {e}")
-        await callback.message.edit_text(f"❌ Ошибка при восстановлении: {str(e)}")
+        logger.exception(f"Tiklanishda xatolik: {e}")
+        await callback.message.edit_text(f"❌ Tiklanishda xatolik: {str(e)}")
     
     await callback.answer()
 
@@ -470,7 +469,7 @@ async def cmd_restore_cancel(callback: CallbackQuery):
             os.remove(backup_path)
         del restore_states[admin_id]
     
-    await callback.message.edit_text("❌ Восстановление отменено.")
+    await callback.message.edit_text("❌ Tiklanish bekor qilindi.")
     await callback.answer()
 
 @router.message(Command("backups"))
@@ -483,23 +482,21 @@ async def cmd_list_backups(message: Message):
     
     if not backups:
         await message.answer(
-            "📭 Нет доступных локальных резервных копий.\n\n"
-            "💡 Совет: Используйте команду /backup для создания новой копии\n"
-            "или /restore для загрузки файла с вашего компьютера."
+            "📭 Rezerv kopiyalar yo'q."
         )
         return
     
-    text = "📦 **Доступные локальные резервные копии:**\n\n"
+    text = "📦 **Rezerv kopiyalar:**\n\n"
     for i, backup in enumerate(backups[:20], 1):  # Показываем последние 20
         status = "✅" if backup['is_valid'] else "❌"
         text += f"{i}. {status} `{backup['name']}`\n"
         text += f"   📅 {backup['modified_str']}\n"
         text += f"   📊 {backup['size_mb']:.2f} MB\n"
         if not backup['is_valid']:
-            text += "   ⚠️ **Повреждена!**\n"
+            text += "   ⚠️ **Xatolik!**\n"
         text += "\n"
     
-    text += f"📁 Всего: {len(backups)} файлов\n\n"
-    text += "💡 Для восстановления из локального бэкапа используйте /restore и загрузите файл"
+    text += f"📁 Barcha: {len(backups)} fayllar\n\n"
+    text += "💡 Tiklash uchun /restore komandasini ishlating"
     
     await message.answer(text, parse_mode="Markdown")
